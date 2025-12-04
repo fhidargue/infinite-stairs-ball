@@ -110,11 +110,11 @@ def bounce(ball_rig, ball_type="tennis", move_forward=False):
             squash_amount_world = (1.0 - scale_y) * RADIUS
 
             # Move ball DOWN so the bottom stays on floor
-            correctedY = POSITION_FLOOR - squash_amount_world
+            corrected_y = POSITION_FLOOR - squash_amount_world
 
             SQUASH_CTRL.scaleY.set(scale_y)
             pm.setKeyframe(SQUASH_CTRL.scaleY, t=t)
-            MOVE_CTRL.translateY.set(correctedY)
+            MOVE_CTRL.translateY.set(corrected_y)
             pm.setKeyframe(MOVE_CTRL.translateY, t=t)
         else:
             # Stretch the ball reducing power

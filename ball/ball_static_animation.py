@@ -1,5 +1,4 @@
 import random
-
 import pymel.core as pm
 
 
@@ -177,3 +176,9 @@ def bounce(ball_rig, ball_type="tennis", move_forward=False):
     pm.setKeyframe(SQUASH_CTRL.scaleY, t=final_frame)
     MOVE_CTRL.translateY.set(1.0)
     pm.setKeyframe(MOVE_CTRL.translateY, t=final_frame)
+
+bounce(
+    ball_rig="ball_rig",
+    ball_type="tennis",
+    move_forward=False
+)

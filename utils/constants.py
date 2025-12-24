@@ -2,7 +2,7 @@ import re
 
 # Hang time and arc shape
 PEAK_BIAS = 0.65         
-BOUNCE_HEIGHT_MULT = 6.0
+BOUNCE_HEIGHT_MULT = 6
 
 # Frames before contact to start stretch
 PRE_CONTACT_OFFSET = 1

@@ -99,7 +99,7 @@ def bounce_on_stairs(
 
     hop_count = len(targets) - 1
 
-    # Timing need to finish the animation on ball going down
+    # Animation should end on the ball going down
     needed = int(total_frames) + int(PRE_CONTACT_OFFSET)
     base = max(12, needed // hop_count)
     durations = [base] * hop_count
@@ -113,7 +113,7 @@ def bounce_on_stairs(
     current_roll = ROTATE.rotateZ.get()
     frame = int(start_frame)
 
-    # TODO: Import from utils
+    # TODO: implement utils
     def key_xyz(t, v):
         v = pm.datatypes.Vector(v)
         pm.setKeyframe(MOVE.translateX, v=v.x, t=t)
@@ -135,16 +135,16 @@ def bounce_on_stairs(
         pm.setKeyframe(SQUASH.rotateY, v=0.0, t=t)
         pm.setKeyframe(SQUASH.rotateZ, v=0.0, t=t)
 
-    # Initial squash position
-    p0 = targets[0]
+    # Start pose
+    grp0, p0 = targets[0]
     key_xyz(frame, p0)
     key_sy(frame, 1.0)
     squash_upright(frame)
 
     # Bounces
     for i in range(hop_count):
-        a = targets[i]
-        b = targets[i + 1]
+        grp_a, a = targets[i]
+        grp_b, b = targets[i + 1]
 
         FRAMES = int(durations[i])
         is_last = (i == hop_count - 1)
@@ -159,6 +159,7 @@ def bounce_on_stairs(
         t_contact = t0 + FRAMES
         t_pre     = t_contact - int(PRE_CONTACT_OFFSET)
 
+        # last hop ends on the descent pose
         if is_last:
             t_contact = None
 
@@ -169,12 +170,11 @@ def bounce_on_stairs(
         stair_a = a.y - RADIUS
         stair_b = b.y - RADIUS
 
-        # Down circle position
         key_xyz(t0, a)
         key_sy(t0, 1.0)
         squash_upright(t0)
 
-        # Squash
+        # Squash at point A
         squash_scale = 1.0 - squash
         squash_center = stair_a + RADIUS * squash_scale
 
@@ -207,14 +207,14 @@ def bounce_on_stairs(
         key_sy(t_peak, 1.0)
         squash_upright(t_peak)
 
-        # Go down gravity
+        # Go down 
         pre_sy = 1.0 + stretch * STRETCH_PRECONTACT_MULT
         pre_center = stair_b + RADIUS * pre_sy
         key_xyz(t_pre, pm.datatypes.Vector(b.x, pre_center, b.z))
         key_sy(t_pre, pre_sy)
         squash_upright(t_pre)
 
-        # Contact on next stair
+        # Squash on point B
         if t_contact is not None:
             center_b = stair_b + RADIUS
             key_xyz(t_contact, pm.datatypes.Vector(b.x, center_b, b.z))
@@ -229,7 +229,7 @@ def bounce_on_stairs(
         else:
             frame = t_pre
 
-    # Tangents setup
+    # Tangents
     pm.keyTangent(
         MOVE.translateY,
         edit=True,

@@ -7,14 +7,25 @@ from utils.constants import (
     SQUASH_FRAME_OFFSET,
     RECOVER_FRAME_OFFSET,
     SQUASH_HOLD_FRAMES,
-    STRETCH_AT_PEAK,
     STRETCH_PRECONTACT_MULT,
     STRETCH_RISE_MULT,
     APEX_TANGENT_WEIGHT,
-    VEL_NORMALIZER
+    VEL_NORMALIZER,
 )
 
 from utils.utils import trailing_int
+
+# TODO: Implement diagonal rotation for ball
+DIAG_ANGLE = 22.0  
+UP_ANGLE   = -8.0    
+DOWN_ANGLE = 10.0  
+
+STAIR_DIAGONAL = {
+    "stairs_topleft_grp":  -DIAG_ANGLE,
+    "stairs_bottomleft_grp": DIAG_ANGLE,
+    "stairs_bottomright_grp": DIAG_ANGLE,
+    "stairs_topright_grp":  -DIAG_ANGLE,
+}
 
 STEP_EXCLUSIONS = {
     "stairs_bottomright_grp": {"step_1"},
@@ -30,6 +41,7 @@ def get_ball_controls(ball_rig):
     ball_geo = pm.PyNode(f"{ball_rig}|ball_geo")
     bbox = ball_geo.getBoundingBox(space="world")
     radius = (bbox.max().y - bbox.min().y) * 0.5
+
     return MOVE, SQUASH, ROTATE, radius
 
 def collect_steps(stair_group):
@@ -46,28 +58,26 @@ def collect_steps(stair_group):
     steps.sort(key=lambda n: trailing_int(n.nodeName()))
     return steps
 
+
 def step_top_center(step, radius):
     bb = step.getBoundingBox(space="world")
-    x = (bb.min().x + bb.max().x) * 0.5
-    z = (bb.min().z + bb.max().z) * 0.5
-    y = bb.max().y + radius
-    return pm.datatypes.Vector(x, y, z)
+    return pm.datatypes.Vector(
+        (bb.min().x + bb.max().x) * 0.5,
+        bb.max().y + radius,
+        (bb.min().z + bb.max().z) * 0.5,
+    )
+
 
 def collect_targets(ball_rig, stair_groups_in_order):
     _, _, _, radius = get_ball_controls(ball_rig)
     targets = []
 
     for grp_name in stair_groups_in_order:
-        steps = collect_steps(grp_name)
-
-        for step in steps:
+        for step in collect_steps(grp_name):
             step_num = trailing_int(step.nodeName())
-
             if (step_num - 1) % 3 != 0:
                 continue
-
-            pos = step_top_center(step, radius)
-            targets.append(pos)
+            targets.append((grp_name, step_top_center(step, radius)))
 
     return targets
 
@@ -75,105 +85,151 @@ def bounce_on_stairs(
     ball_rig,
     stair_groups_in_order,
     start_frame=1,
-    frames_per_bounce=30,
+    total_frames=250,
     squash=0.38,
     stretch=0.40,
+    roll_normalizer=VEL_NORMALIZER,
 ):
-
-    MOVE, SQUASH_CTRL, ROTATE, RADIUS = get_ball_controls(ball_rig)
+    MOVE, SQUASH, ROTATE, RADIUS = get_ball_controls(ball_rig)
     targets = collect_targets(ball_rig, stair_groups_in_order)
 
     if len(targets) < 2:
-        pm.warning("Not enough targets found. Check stair group names and step naming.")
+        pm.warning("Not enough targets.")
         return
 
-    FRAMES = frames_per_bounce
+    hop_count = len(targets) - 1
+
+    # Timing need to finish the animation on ball going down
+    needed = int(total_frames) + int(PRE_CONTACT_OFFSET)
+    base = max(12, needed // hop_count)
+    durations = [base] * hop_count
+    for i in range(needed - base * hop_count):
+        durations[i] += 1
+
     BOUNCE_HEIGHT = RADIUS * BOUNCE_HEIGHT_MULT
 
     apex_frames = []
     contact_frames = []
+    current_roll = ROTATE.rotateZ.get()
+    frame = int(start_frame)
 
-    def key_translate(t, v):
+    # TODO: Import from utils
+    def key_xyz(t, v):
+        v = pm.datatypes.Vector(v)
         pm.setKeyframe(MOVE.translateX, v=v.x, t=t)
         pm.setKeyframe(MOVE.translateY, v=v.y, t=t)
+        pm.setKeyframe(MOVE.translateZ, v=v.z, t=t)
+
+    def key_xz(t, v):
+        pm.setKeyframe(MOVE.translateX, v=v.x, t=t)
         pm.setKeyframe(MOVE.translateZ, v=v.z, t=t)
 
     def key_y(t, y):
         pm.setKeyframe(MOVE.translateY, v=y, t=t)
 
     def key_sy(t, sy):
-        pm.setKeyframe(SQUASH_CTRL.scaleY, v=sy, t=t)
+        pm.setKeyframe(SQUASH.scaleY, v=sy, t=t)
 
-    current_rotation = ROTATE.rotateZ.get()
+    def squash_upright(t):
+        pm.setKeyframe(SQUASH.rotateX, v=0.0, t=t)
+        pm.setKeyframe(SQUASH.rotateY, v=0.0, t=t)
+        pm.setKeyframe(SQUASH.rotateZ, v=0.0, t=t)
 
-    frame = start_frame
-    prev = targets[0]
-
-    # Initial placement
-    key_translate(frame, prev)
+    # Initial squash position
+    p0 = targets[0]
+    key_xyz(frame, p0)
     key_sy(frame, 1.0)
+    squash_upright(frame)
 
-    for index in range(len(targets) - 1):
-        a = targets[index]
-        b = targets[index + 1]
+    # Bounces
+    for i in range(hop_count):
+        a = targets[i]
+        b = targets[i + 1]
 
-        peak_frame = frame + int(FRAMES * PEAK_BIAS)
-        contact_frame = frame + FRAMES
+        FRAMES = int(durations[i])
+        is_last = (i == hop_count - 1)
 
-        apex_frames.append(peak_frame)
-        contact_frames.append(contact_frame)
+        t0 = frame
+        t_squash  = t0 + int(SQUASH_FRAME_OFFSET)
+        t_recover = t0 + int(RECOVER_FRAME_OFFSET)
+        t_launch  = t_recover + int(SQUASH_HOLD_FRAMES)
+        t_impulse = t_launch + 1
 
-        stair_top_y = b.y - RADIUS
+        t_peak    = t0 + int(FRAMES * PEAK_BIAS)
+        t_contact = t0 + FRAMES
+        t_pre     = t_contact - int(PRE_CONTACT_OFFSET)
 
+        if is_last:
+            t_contact = None
+
+        apex_frames.append(t_peak)
+        if t_contact is not None:
+            contact_frames.append(t_contact)
+
+        stair_a = a.y - RADIUS
+        stair_b = b.y - RADIUS
+
+        # Down circle position
+        key_xyz(t0, a)
+        key_sy(t0, 1.0)
+        squash_upright(t0)
+
+        # Squash
+        squash_scale = 1.0 - squash
+        squash_center = stair_a + RADIUS * squash_scale
+
+        for t in (t_squash, t_recover):
+            key_xz(t, a)
+            key_y(t, squash_center)
+            key_sy(t, squash_scale)
+            squash_upright(t)
+
+        # Jump
+        center_a = stair_a + RADIUS
+        launch_sy = 1.0 + stretch * STRETCH_RISE_MULT
+
+        key_xz(t_launch, a)
+        key_y(t_launch, center_a)
+        key_sy(t_launch, launch_sy)
+        squash_upright(t_launch)
+
+        # Jump impulse
+        impulse_y = center_a + (BOUNCE_HEIGHT * 0.18)
+        key_xz(t_impulse, a)
+        key_y(t_impulse, impulse_y)
+        key_sy(t_impulse, launch_sy)
+        squash_upright(t_impulse)
+
+        # Apex circle position
         peak = (a + b) * 0.5
         peak.y = max(a.y, b.y) + BOUNCE_HEIGHT
-        key_translate(peak_frame, peak)
-        key_sy(peak_frame, 1.0 + STRETCH_AT_PEAK)
+        key_xyz(t_peak, peak)
+        key_sy(t_peak, 1.0)
+        squash_upright(t_peak)
 
-        pre_contact = contact_frame - max(1, PRE_CONTACT_OFFSET)
+        # Go down gravity
         pre_sy = 1.0 + stretch * STRETCH_PRECONTACT_MULT
+        pre_center = stair_b + RADIUS * pre_sy
+        key_xyz(t_pre, pm.datatypes.Vector(b.x, pre_center, b.z))
+        key_sy(t_pre, pre_sy)
+        squash_upright(t_pre)
 
-        key_sy(pre_contact, pre_sy)
-        key_y(pre_contact, stair_top_y + RADIUS * pre_sy)
+        # Contact on next stair
+        if t_contact is not None:
+            center_b = stair_b + RADIUS
+            key_xyz(t_contact, pm.datatypes.Vector(b.x, center_b, b.z))
+            key_sy(t_contact, 1.0)
+            squash_upright(t_contact)
 
-        contact_center_y = stair_top_y + RADIUS
-        key_translate(contact_frame, b)
-        key_y(contact_frame, contact_center_y)
-        key_sy(contact_frame, 1.0)
+            travel = (b - a).length()
+            current_roll += travel * roll_normalizer
+            pm.setKeyframe(ROTATE.rotateZ, v=current_roll, t=t_contact)
 
-        squash_scale = 1.0 - squash
-        squash_center_y = stair_top_y + RADIUS * squash_scale
+            frame = t_contact
+        else:
+            frame = t_pre
 
-        squash_frame = contact_frame + SQUASH_FRAME_OFFSET
-        recover_frame = contact_frame + RECOVER_FRAME_OFFSET
-        launch_frame = recover_frame + SQUASH_HOLD_FRAMES
-
-        for t in (squash_frame, recover_frame):
-            key_translate(t, b)
-            key_sy(t, squash_scale)
-            key_y(t, squash_center_y)
-
-        launch_sy = 1.0 + stretch * STRETCH_RISE_MULT
-        launch_center_y = stair_top_y + RADIUS
-
-        key_translate(launch_frame, b)
-        key_sy(launch_frame, launch_sy)
-        key_y(launch_frame, launch_center_y)
-
-        impulse_frame = launch_frame + 1
-        impulse_height = launch_center_y + (BOUNCE_HEIGHT * 0.22)
-
-        key_translate(impulse_frame, b)
-        key_y(impulse_frame, impulse_height)
-        key_sy(impulse_frame, launch_sy)
-
-        travel = (b - prev).length()
-        current_rotation += travel * VEL_NORMALIZER
-        pm.setKeyframe(ROTATE.rotateZ, v=current_rotation, t=contact_frame)
-
-        prev = b
-        frame = contact_frame
-
+    # Tangents setup
     pm.keyTangent(
         MOVE.translateY,
         edit=True,
@@ -182,36 +238,25 @@ def bounce_on_stairs(
         ott="spline",
     )
 
-    # Fast bottom
     for f in contact_frames:
-        for t in (f, f + SQUASH_FRAME_OFFSET, f + RECOVER_FRAME_OFFSET):
-            pm.keyTangent(
-                MOVE.translateY,
-                edit=True,
-                time=(t, t),
-                inTangentType="linear",
-                outTangentType="linear",
-                inWeight=0,
-                outWeight=0,
-            )
+        for t in (f, f - 1, f - 2):
+            if t >= start_frame:
+                pm.keyTangent(
+                    MOVE.translateY,
+                    edit=True,
+                    time=(t, t),
+                    inTangentType="linear",
+                    outTangentType="linear",
+                )
 
-    # Hang time at apex
     for f in apex_frames:
         pm.keyTangent(
             MOVE.translateY,
             edit=True,
             time=(f, f),
-            inTangentType="auto",
-            outTangentType="auto",
             inWeight=APEX_TANGENT_WEIGHT,
             outWeight=APEX_TANGENT_WEIGHT,
         )
 
-    pm.keyTangent(
-        SQUASH_CTRL.scaleY,
-        edit=True,
-        itt="auto",
-        ott="auto",
-        weightedTangents=True,
-    )
-
+    pm.keyTangent(SQUASH.scaleY, edit=True, itt="auto", ott="auto")
+    pm.keyTangent(SQUASH.rotate, edit=True, itt="auto", ott="auto")

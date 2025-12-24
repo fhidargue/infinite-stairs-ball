@@ -1,5 +1,6 @@
 from animations.dynamic_ball import bounce_on_stairs
 from objects.infinite_stairs import create_stairs_with_base
+from utils.constants import VEL_NORMALIZER, TOTAL_FRAMES, SQUASH, STRETCH
 
 STAIR_GROUPS = [
     "stairs_topleft_grp",
@@ -13,9 +14,9 @@ def run_bounce():
         ball_rig="ball_rig",
         stair_groups_in_order=STAIR_GROUPS,
         start_frame=1,
-        frames_per_bounce=23.5,
-        squash=0.38,
-        stretch=0.40,
+        total_frames=TOTAL_FRAMES,
+        squash=SQUASH,
+        stretch=STRETCH,
     )
 
 def create_stairs():

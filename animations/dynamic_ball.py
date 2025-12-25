@@ -17,15 +17,13 @@ from utils.constants import (
 from utils.utils import trailing_int
 
 # TODO: Implement diagonal rotation for ball
-DIAG_ANGLE = 22.0  
-UP_ANGLE   = -8.0    
-DOWN_ANGLE = 10.0  
+DIAG_ANGLE = 22.0 
 
 STAIR_DIAGONAL = {
-    "stairs_topleft_grp":  -DIAG_ANGLE,
-    "stairs_bottomleft_grp": DIAG_ANGLE,
-    "stairs_bottomright_grp": DIAG_ANGLE,
-    "stairs_topright_grp":  -DIAG_ANGLE,
+    "stairs_topleft_grp":  DIAG_ANGLE,
+    "stairs_bottomleft_grp": -DIAG_ANGLE,
+    "stairs_bottomright_grp": -DIAG_ANGLE,
+    "stairs_topright_grp":  DIAG_ANGLE,
 }
 
 STEP_EXCLUSIONS = {
@@ -100,6 +98,8 @@ def bounce_on_stairs(
         return
 
     hop_count = len(targets) - 1
+
+    # Animation ends by ball descending
     needed = int(total_frames) + int(PRE_CONTACT_OFFSET)
     base = max(12, needed // hop_count)
     durations = [base] * hop_count
@@ -110,6 +110,7 @@ def bounce_on_stairs(
 
     apex_frames = []
     contact_frames = []
+
     current_roll = ROTATE.rotateZ.get()
     frame = int(start_frame)
 
@@ -135,8 +136,8 @@ def bounce_on_stairs(
         pm.setKeyframe(SQUASH.rotateY, v=0.0, t=t)
         pm.setKeyframe(SQUASH.rotateZ, v=0.0, t=t)
 
-    # Start position
-    grp0, p0 = targets[0]
+    # Starting pose
+    p0 = targets[0]
     key_xyz(frame, p0)
     key_sy(frame, 1.0)
     squash_upright(frame)
@@ -144,19 +145,26 @@ def bounce_on_stairs(
     # Bounces
     for i in range(hop_count):
         grp_a, a = targets[i]
-        grp_b, b = targets[i + 1]
+        b = targets[i + 1]
 
         FRAMES = int(durations[i])
         is_last = (i == hop_count - 1)
+
+        diag = STAIR_DIAGONAL.get(grp_a, 0.0)
 
         t0 = frame
         t_squash  = t0 + int(SQUASH_FRAME_OFFSET)
         t_recover = t0 + int(RECOVER_FRAME_OFFSET)
         t_launch  = t_recover + int(SQUASH_HOLD_FRAMES)
         t_impulse = t_launch + 1
+
         t_peak    = t0 + int(FRAMES * PEAK_BIAS)
         t_contact = t0 + FRAMES
         t_pre     = t_contact - int(PRE_CONTACT_OFFSET)
+
+        # Diagonal timing
+        t_up_diag   = t_peak - 2
+        t_down_diag = t_peak + 2
 
         if is_last:
             t_contact = None
@@ -168,7 +176,7 @@ def bounce_on_stairs(
         stair_a = a.y - RADIUS
         stair_b = b.y - RADIUS
 
-        # Contact A
+        # Initial circle in A
         key_xyz(t0, pm.datatypes.Vector(
             a.x,
             stair_a + RADIUS + CONTACT_EPSILON,
@@ -177,7 +185,7 @@ def bounce_on_stairs(
         key_sy(t0, 1.0)
         squash_upright(t0)
 
-        # Squash A
+        # Squash in A
         squash_scale = 1.0 - squash
         squash_center = stair_a + (RADIUS * squash_scale) + CONTACT_EPSILON
 
@@ -187,7 +195,7 @@ def bounce_on_stairs(
             key_sy(t, squash_scale)
             squash_upright(t)
 
-        # Jump vertically
+        # Jump
         center_a = stair_a + RADIUS + CONTACT_EPSILON
         launch_sy = 1.0 + stretch * STRETCH_RISE_MULT
 
@@ -196,21 +204,29 @@ def bounce_on_stairs(
         key_sy(t_launch, launch_sy)
         squash_upright(t_launch)
 
-        # Ball impulse
+        # Jump impulse
         impulse_y = center_a + (BOUNCE_HEIGHT * 0.18)
         key_xz(t_impulse, a)
         key_y(t_impulse, impulse_y)
         key_sy(t_impulse, launch_sy)
         squash_upright(t_impulse)
 
-        # Apex, center
+        # Up diagonal rotation
+        if t_up_diag > t_impulse and t_up_diag < t_peak:
+            pm.setKeyframe(SQUASH.rotateZ, v=diag, t=t_up_diag)
+
+        # Apex
         peak = (a + b) * 0.5
         peak.y = max(a.y, b.y) + BOUNCE_HEIGHT
         key_xyz(t_peak, peak)
         key_sy(t_peak, 1.0)
         squash_upright(t_peak)
 
-        # Go down vertically
+        # Down diagonal rotation
+        if t_down_diag > t_peak and t_down_diag < t_pre:
+            pm.setKeyframe(SQUASH.rotateZ, v=-diag, t=t_down_diag)
+
+        # Descent
         pre_sy = 1.0 + stretch * STRETCH_PRECONTACT_MULT
         pre_center = stair_b + (RADIUS * pre_sy) + CONTACT_EPSILON
 
@@ -218,7 +234,7 @@ def bounce_on_stairs(
         key_sy(t_pre, pre_sy)
         squash_upright(t_pre)
 
-        # Contact B
+        # Contact in B
         if t_contact is not None:
             center_b = stair_b + RADIUS + CONTACT_EPSILON
             key_xyz(t_contact, pm.datatypes.Vector(b.x, center_b, b.z))

@@ -11,6 +11,7 @@ from utils.constants import (
     STRETCH_RISE_MULT,
     APEX_TANGENT_WEIGHT,
     VEL_NORMALIZER,
+    CONTACT_EPSILON
 )
 
 from utils.utils import trailing_int
@@ -80,6 +81,7 @@ def collect_targets(ball_rig, stair_groups_in_order):
             targets.append((grp_name, step_top_center(step, radius)))
 
     return targets
+    
 
 def bounce_on_stairs(
     ball_rig,
@@ -98,8 +100,6 @@ def bounce_on_stairs(
         return
 
     hop_count = len(targets) - 1
-
-    # Animation should end on the ball going down
     needed = int(total_frames) + int(PRE_CONTACT_OFFSET)
     base = max(12, needed // hop_count)
     durations = [base] * hop_count
@@ -113,7 +113,7 @@ def bounce_on_stairs(
     current_roll = ROTATE.rotateZ.get()
     frame = int(start_frame)
 
-    # TODO: implement utils
+    # TODO: add utils
     def key_xyz(t, v):
         v = pm.datatypes.Vector(v)
         pm.setKeyframe(MOVE.translateX, v=v.x, t=t)
@@ -135,7 +135,7 @@ def bounce_on_stairs(
         pm.setKeyframe(SQUASH.rotateY, v=0.0, t=t)
         pm.setKeyframe(SQUASH.rotateZ, v=0.0, t=t)
 
-    # Start pose
+    # Start position
     grp0, p0 = targets[0]
     key_xyz(frame, p0)
     key_sy(frame, 1.0)
@@ -154,12 +154,10 @@ def bounce_on_stairs(
         t_recover = t0 + int(RECOVER_FRAME_OFFSET)
         t_launch  = t_recover + int(SQUASH_HOLD_FRAMES)
         t_impulse = t_launch + 1
-
         t_peak    = t0 + int(FRAMES * PEAK_BIAS)
         t_contact = t0 + FRAMES
         t_pre     = t_contact - int(PRE_CONTACT_OFFSET)
 
-        # last hop ends on the descent pose
         if is_last:
             t_contact = None
 
@@ -170,13 +168,18 @@ def bounce_on_stairs(
         stair_a = a.y - RADIUS
         stair_b = b.y - RADIUS
 
-        key_xyz(t0, a)
+        # Contact A
+        key_xyz(t0, pm.datatypes.Vector(
+            a.x,
+            stair_a + RADIUS + CONTACT_EPSILON,
+            a.z
+        ))
         key_sy(t0, 1.0)
         squash_upright(t0)
 
-        # Squash at point A
+        # Squash A
         squash_scale = 1.0 - squash
-        squash_center = stair_a + RADIUS * squash_scale
+        squash_center = stair_a + (RADIUS * squash_scale) + CONTACT_EPSILON
 
         for t in (t_squash, t_recover):
             key_xz(t, a)
@@ -184,8 +187,8 @@ def bounce_on_stairs(
             key_sy(t, squash_scale)
             squash_upright(t)
 
-        # Jump
-        center_a = stair_a + RADIUS
+        # Jump vertically
+        center_a = stair_a + RADIUS + CONTACT_EPSILON
         launch_sy = 1.0 + stretch * STRETCH_RISE_MULT
 
         key_xz(t_launch, a)
@@ -193,30 +196,31 @@ def bounce_on_stairs(
         key_sy(t_launch, launch_sy)
         squash_upright(t_launch)
 
-        # Jump impulse
+        # Ball impulse
         impulse_y = center_a + (BOUNCE_HEIGHT * 0.18)
         key_xz(t_impulse, a)
         key_y(t_impulse, impulse_y)
         key_sy(t_impulse, launch_sy)
         squash_upright(t_impulse)
 
-        # Apex circle position
+        # Apex, center
         peak = (a + b) * 0.5
         peak.y = max(a.y, b.y) + BOUNCE_HEIGHT
         key_xyz(t_peak, peak)
         key_sy(t_peak, 1.0)
         squash_upright(t_peak)
 
-        # Go down 
+        # Go down vertically
         pre_sy = 1.0 + stretch * STRETCH_PRECONTACT_MULT
-        pre_center = stair_b + RADIUS * pre_sy
+        pre_center = stair_b + (RADIUS * pre_sy) + CONTACT_EPSILON
+
         key_xyz(t_pre, pm.datatypes.Vector(b.x, pre_center, b.z))
         key_sy(t_pre, pre_sy)
         squash_upright(t_pre)
 
-        # Squash on point B
+        # Contact B
         if t_contact is not None:
-            center_b = stair_b + RADIUS
+            center_b = stair_b + RADIUS + CONTACT_EPSILON
             key_xyz(t_contact, pm.datatypes.Vector(b.x, center_b, b.z))
             key_sy(t_contact, 1.0)
             squash_upright(t_contact)

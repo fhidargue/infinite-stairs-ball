@@ -26,6 +26,7 @@ APEX_TANGENT_WEIGHT = 14
 
 # Rotation
 VEL_NORMALIZER = 0.08
+DIAG_ANGLE = 22.0 
 
 # Regex
 DIGIT_REGEX = re.compile(r"(\d+)$")

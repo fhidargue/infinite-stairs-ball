@@ -11,13 +11,11 @@ from utils.constants import (
     STRETCH_RISE_MULT,
     APEX_TANGENT_WEIGHT,
     VEL_NORMALIZER,
-    CONTACT_EPSILON
+    CONTACT_EPSILON,
+    DIAG_ANGLE
 )
 
 from utils.utils import trailing_int
-
-# TODO: Implement diagonal rotation for ball
-DIAG_ANGLE = 22.0 
 
 STAIR_DIAGONAL = {
     "stairs_topleft_grp":  DIAG_ANGLE,
@@ -99,7 +97,6 @@ def bounce_on_stairs(
 
     hop_count = len(targets) - 1
 
-    # Animation ends by ball descending
     needed = int(total_frames) + int(PRE_CONTACT_OFFSET)
     base = max(12, needed // hop_count)
     durations = [base] * hop_count
@@ -114,7 +111,7 @@ def bounce_on_stairs(
     current_roll = ROTATE.rotateZ.get()
     frame = int(start_frame)
 
-    # TODO: add utils
+    # ---------------- helpers ----------------
     def key_xyz(t, v):
         v = pm.datatypes.Vector(v)
         pm.setKeyframe(MOVE.translateX, v=v.x, t=t)
@@ -136,33 +133,44 @@ def bounce_on_stairs(
         pm.setKeyframe(SQUASH.rotateY, v=0.0, t=t)
         pm.setKeyframe(SQUASH.rotateZ, v=0.0, t=t)
 
-    # Starting pose
-    p0 = targets[0]
+    # ---------------- start pose ----------------
+    _, p0 = targets[0]
     key_xyz(frame, p0)
     key_sy(frame, 1.0)
     squash_upright(frame)
 
-    # Bounces
+    # ---------------- hops ----------------
     for i in range(hop_count):
         grp_a, a = targets[i]
-        b = targets[i + 1]
+        grp_b, b = targets[i + 1]
+
+        a = pm.datatypes.Vector(a)
+        b = pm.datatypes.Vector(b)
 
         FRAMES = int(durations[i])
         is_last = (i == hop_count - 1)
 
+        # detect group transition
+        is_group_transition = (grp_a != grp_b)
+        is_straight_transition = (
+            (grp_a == "stairs_topleft_grp" and grp_b == "stairs_bottomleft_grp") or
+            (grp_a == "stairs_bottomright_grp" and grp_b == "stairs_topright_grp")
+        )
+
         diag = STAIR_DIAGONAL.get(grp_a, 0.0)
+        if is_group_transition and is_straight_transition:
+            diag = 0.0
 
         t0 = frame
-        t_squash  = t0 + int(SQUASH_FRAME_OFFSET)
-        t_recover = t0 + int(RECOVER_FRAME_OFFSET)
-        t_launch  = t_recover + int(SQUASH_HOLD_FRAMES)
+        t_squash  = t0 + SQUASH_FRAME_OFFSET
+        t_recover = t0 + RECOVER_FRAME_OFFSET
+        t_launch  = t_recover + SQUASH_HOLD_FRAMES
         t_impulse = t_launch + 1
 
         t_peak    = t0 + int(FRAMES * PEAK_BIAS)
         t_contact = t0 + FRAMES
-        t_pre     = t_contact - int(PRE_CONTACT_OFFSET)
+        t_pre     = t_contact - PRE_CONTACT_OFFSET
 
-        # Diagonal timing
         t_up_diag   = t_peak - 2
         t_down_diag = t_peak + 2
 
@@ -176,16 +184,19 @@ def bounce_on_stairs(
         stair_a = a.y - RADIUS
         stair_b = b.y - RADIUS
 
-        # Initial circle in A
-        key_xyz(t0, pm.datatypes.Vector(
-            a.x,
-            stair_a + RADIUS + CONTACT_EPSILON,
-            a.z
-        ))
+        # ---- contact A
+        key_xyz(
+            t0,
+            pm.datatypes.Vector(
+                a.x,
+                stair_a + RADIUS + CONTACT_EPSILON,
+                a.z
+            ),
+        )
         key_sy(t0, 1.0)
         squash_upright(t0)
 
-        # Squash in A
+        # ---- squash A
         squash_scale = 1.0 - squash
         squash_center = stair_a + (RADIUS * squash_scale) + CONTACT_EPSILON
 
@@ -195,7 +206,7 @@ def bounce_on_stairs(
             key_sy(t, squash_scale)
             squash_upright(t)
 
-        # Jump
+        # ---- launch
         center_a = stair_a + RADIUS + CONTACT_EPSILON
         launch_sy = 1.0 + stretch * STRETCH_RISE_MULT
 
@@ -204,40 +215,45 @@ def bounce_on_stairs(
         key_sy(t_launch, launch_sy)
         squash_upright(t_launch)
 
-        # Jump impulse
         impulse_y = center_a + (BOUNCE_HEIGHT * 0.18)
         key_xz(t_impulse, a)
         key_y(t_impulse, impulse_y)
         key_sy(t_impulse, launch_sy)
         squash_upright(t_impulse)
 
-        # Up diagonal rotation
-        if t_up_diag > t_impulse and t_up_diag < t_peak:
+        # ---- up diagonal rotation
+        if diag != 0.0 and t_up_diag > t_impulse:
             pm.setKeyframe(SQUASH.rotateZ, v=diag, t=t_up_diag)
 
-        # Apex
+        # ---- apex
         peak = (a + b) * 0.5
         peak.y = max(a.y, b.y) + BOUNCE_HEIGHT
         key_xyz(t_peak, peak)
         key_sy(t_peak, 1.0)
         squash_upright(t_peak)
 
-        # Down diagonal rotation
-        if t_down_diag > t_peak and t_down_diag < t_pre:
+        # ---- down diagonal rotation
+        if diag != 0.0 and t_down_diag < t_pre:
             pm.setKeyframe(SQUASH.rotateZ, v=-diag, t=t_down_diag)
 
-        # Descent
+        # ---- descent
         pre_sy = 1.0 + stretch * STRETCH_PRECONTACT_MULT
         pre_center = stair_b + (RADIUS * pre_sy) + CONTACT_EPSILON
 
-        key_xyz(t_pre, pm.datatypes.Vector(b.x, pre_center, b.z))
+        key_xyz(
+            t_pre,
+            pm.datatypes.Vector(b.x, pre_center, b.z)
+        )
         key_sy(t_pre, pre_sy)
         squash_upright(t_pre)
 
-        # Contact in B
+        # ---- contact B
         if t_contact is not None:
             center_b = stair_b + RADIUS + CONTACT_EPSILON
-            key_xyz(t_contact, pm.datatypes.Vector(b.x, center_b, b.z))
+            key_xyz(
+                t_contact,
+                pm.datatypes.Vector(b.x, center_b, b.z)
+            )
             key_sy(t_contact, 1.0)
             squash_upright(t_contact)
 
@@ -249,7 +265,7 @@ def bounce_on_stairs(
         else:
             frame = t_pre
 
-    # Tangents
+    # ---------------- tangents ----------------
     pm.keyTangent(
         MOVE.translateY,
         edit=True,

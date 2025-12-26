@@ -12,10 +12,12 @@ from utils.constants import (
     APEX_TANGENT_WEIGHT,
     VEL_NORMALIZER,
     CONTACT_EPSILON,
-    DIAG_ANGLE
+    DIAG_ANGLE,
+    JUMP_HEIGHT_SCALE,
+    APEX_BACK_BLEND
 )
 
-from utils.utils import trailing_int
+from utils.utils import trailing_int, key_xyz, key_xz, key_y, key_sy, squash_upright, squash_contact_center
 
 STAIR_DIAGONAL = {
     "stairs_topleft_grp":  DIAG_ANGLE,
@@ -89,21 +91,23 @@ def bounce_on_stairs(
     roll_normalizer=VEL_NORMALIZER,
 ):
     MOVE, SQUASH, ROTATE, RADIUS = get_ball_controls(ball_rig)
+    BOUNCE_HEIGHT = RADIUS * BOUNCE_HEIGHT_MULT * JUMP_HEIGHT_SCALE
+    SQUASH_Y_OFFSET = 0.15 * RADIUS
+    POST_SQUASH_Y_OFFSET = 0.15 * RADIUS
+
     targets = collect_targets(ball_rig, stair_groups_in_order)
+    hop_count = len(targets) - 1
 
     if len(targets) < 2:
-        pm.warning("Not enough targets.")
+        pm.warning("Not enough targets for the ball to bounce.")
         return
-
-    hop_count = len(targets) - 1
 
     needed = int(total_frames) + int(PRE_CONTACT_OFFSET)
     base = max(12, needed // hop_count)
     durations = [base] * hop_count
+
     for i in range(needed - base * hop_count):
         durations[i] += 1
-
-    BOUNCE_HEIGHT = RADIUS * BOUNCE_HEIGHT_MULT
 
     apex_frames = []
     contact_frames = []
@@ -111,161 +115,187 @@ def bounce_on_stairs(
     current_roll = ROTATE.rotateZ.get()
     frame = int(start_frame)
 
-    # ---------------- helpers ----------------
-    def key_xyz(t, v):
-        v = pm.datatypes.Vector(v)
-        pm.setKeyframe(MOVE.translateX, v=v.x, t=t)
-        pm.setKeyframe(MOVE.translateY, v=v.y, t=t)
-        pm.setKeyframe(MOVE.translateZ, v=v.z, t=t)
+    # Precompute stairs into indexes for the jumps
+    # For example: stair1 = 0, stair4 = 1 and stair7 = 2 (3 bounces per stair group)
+    ordinals = []
+    counts = {}
 
-    def key_xz(t, v):
-        pm.setKeyframe(MOVE.translateX, v=v.x, t=t)
-        pm.setKeyframe(MOVE.translateZ, v=v.z, t=t)
+    for group_name, _pos in targets:
+        counts.setdefault(group_name, 0)
+        ordinals.append(counts[group_name])
+        counts[group_name] += 1
 
-    def key_y(t, y):
-        pm.setKeyframe(MOVE.translateY, v=y, t=t)
+    # Front hold state for the bottom left stairs
+    # The ball will bounce in front of the stairs, simulating placement
+    front_z_hold = None
 
-    def key_sy(t, sy):
-        pm.setKeyframe(SQUASH.scaleY, v=sy, t=t)
+    def visual_position(group, ordinal, pos):
+        position = pm.datatypes.Vector(pos)
+        if (front_z_hold is not None) and (group == "stairs_bottomleft_grp") and (ordinal in (0, 1)):
+            position.z = front_z_hold
+        return position
 
-    def squash_upright(t):
-        pm.setKeyframe(SQUASH.rotateX, v=0.0, t=t)
-        pm.setKeyframe(SQUASH.rotateY, v=0.0, t=t)
-        pm.setKeyframe(SQUASH.rotateZ, v=0.0, t=t)
+    # Starting pose (circle)
+    _, initial_position = targets[0]
+    initial_position = pm.datatypes.Vector(initial_position)
+    key_xyz(MOVE, frame, initial_position)
+    key_sy(SQUASH, frame, 1.0)
+    squash_upright(SQUASH, frame)
 
-    # ---------------- start pose ----------------
-    _, p0 = targets[0]
-    key_xyz(frame, p0)
-    key_sy(frame, 1.0)
-    squash_upright(frame)
-
-    # ---------------- hops ----------------
+    # Ball bounces
     for i in range(hop_count):
-        grp_a, a = targets[i]
-        grp_b, b = targets[i + 1]
+        group_a, a_raw = targets[i]
+        group_b, b_raw = targets[i + 1]
+        ordinal_a = ordinals[i]
+        ordinal_b = ordinals[i + 1]
 
-        a = pm.datatypes.Vector(a)
-        b = pm.datatypes.Vector(b)
+        a_raw = pm.datatypes.Vector(a_raw)
+        b_raw = pm.datatypes.Vector(b_raw)
 
         FRAMES = int(durations[i])
         is_last = (i == hop_count - 1)
 
-        # detect group transition
-        is_group_transition = (grp_a != grp_b)
+        # Remove diagonal bounce on stair sides
+        is_group_transition = (group_a != group_b)
         is_straight_transition = (
-            (grp_a == "stairs_topleft_grp" and grp_b == "stairs_bottomleft_grp") or
-            (grp_a == "stairs_bottomright_grp" and grp_b == "stairs_topright_grp")
+            (group_a == "stairs_topleft_grp" and group_b == "stairs_bottomleft_grp") or
+            (group_a == "stairs_bottomright_grp" and group_b == "stairs_topright_grp")
         )
 
-        diag = STAIR_DIAGONAL.get(grp_a, 0.0)
+        diag = STAIR_DIAGONAL.get(group_a, 0.0)
         if is_group_transition and is_straight_transition:
             diag = 0.0
 
-        t0 = frame
-        t_squash  = t0 + SQUASH_FRAME_OFFSET
-        t_recover = t0 + RECOVER_FRAME_OFFSET
-        t_launch  = t_recover + SQUASH_HOLD_FRAMES
-        t_impulse = t_launch + 1
+        # Push ball forward for only the bottom left stairs
+        if group_a == "stairs_topleft_grp" and ordinal_a == 2 and group_b == "stairs_bottomleft_grp" and ordinal_b == 0:
+            dz = abs(b_raw.z - a_raw.z)
+            front_z_hold = a_raw.z + (dz * 0.35) + (RADIUS * 0.25)
 
-        t_peak    = t0 + int(FRAMES * PEAK_BIAS)
-        t_contact = t0 + FRAMES
-        t_pre     = t_contact - PRE_CONTACT_OFFSET
+        a = visual_position(group_a, ordinal_a, a_raw)
+        b = visual_position(group_b, ordinal_b, b_raw)
 
-        t_up_diag   = t_peak - 2
-        t_down_diag = t_peak + 2
+        # Keep the fake palcement hold through bottom left step4 (ordinal 1).
+        clear_front_hold_after_hop = (group_a == "stairs_bottomleft_grp" and ordinal_a == 1)
+
+        # Timing logic
+        initial_time = int(frame)
+        time_squash = initial_time + int(SQUASH_FRAME_OFFSET)
+        time_recover = initial_time + int(RECOVER_FRAME_OFFSET)
+        time_launch = time_recover + int(SQUASH_HOLD_FRAMES)
+        time_impulse = time_launch + 1
+
+        time_peak = initial_time + int(FRAMES * PEAK_BIAS)
+        time_contact = initial_time + int(FRAMES)
+        time_pre = time_contact - int(PRE_CONTACT_OFFSET)
+
+        time_up_diag = time_peak - 2
+        time_down_diag = time_peak + 2
 
         if is_last:
-            t_contact = None
+            time_contact = None
 
-        apex_frames.append(t_peak)
-        if t_contact is not None:
-            contact_frames.append(t_contact)
+        apex_frames.append(time_peak)
+        if time_contact is not None:
+            contact_frames.append(time_contact)
 
+        # Stair tops / top faces
         stair_a = a.y - RADIUS
         stair_b = b.y - RADIUS
 
-        # ---- contact A
+        # Contact A
         key_xyz(
-            t0,
+            MOVE,
+            initial_time,
             pm.datatypes.Vector(
                 a.x,
                 stair_a + RADIUS + CONTACT_EPSILON,
-                a.z
+                a.z,
             ),
         )
-        key_sy(t0, 1.0)
-        squash_upright(t0)
+        key_sy(SQUASH, initial_time, 1.0)
+        squash_upright(SQUASH, initial_time)
 
-        # ---- squash A
+        # Squash A
         squash_scale = 1.0 - squash
-        squash_center = stair_a + (RADIUS * squash_scale) + CONTACT_EPSILON
+        squash_center = (
+            stair_a
+            + (RADIUS * squash_scale)
+            + CONTACT_EPSILON
+            + SQUASH_Y_OFFSET
+        )
 
-        for t in (t_squash, t_recover):
-            key_xz(t, a)
-            key_y(t, squash_center)
-            key_sy(t, squash_scale)
-            squash_upright(t)
+        for t in (time_squash, time_recover):
+            key_xz(MOVE, t, a)
+            key_y(MOVE, t, squash_center)
+            key_sy(SQUASH, t, squash_scale)
+            squash_upright(SQUASH, t)
 
-        # ---- launch
-        center_a = stair_a + RADIUS + CONTACT_EPSILON
+        # Launch from stair top
+        center_a = stair_a + RADIUS + CONTACT_EPSILON + POST_SQUASH_Y_OFFSET
         launch_sy = 1.0 + stretch * STRETCH_RISE_MULT
 
-        key_xz(t_launch, a)
-        key_y(t_launch, center_a)
-        key_sy(t_launch, launch_sy)
-        squash_upright(t_launch)
+        key_xz(MOVE, time_launch, a)
+        key_y(MOVE, time_launch, center_a)
+        key_sy(SQUASH, time_launch, launch_sy)
+        squash_upright(SQUASH, time_launch)
 
+        # Impulse upwards
         impulse_y = center_a + (BOUNCE_HEIGHT * 0.18)
-        key_xz(t_impulse, a)
-        key_y(t_impulse, impulse_y)
-        key_sy(t_impulse, launch_sy)
-        squash_upright(t_impulse)
+        key_xz(MOVE, time_impulse, a)
+        key_y(MOVE, time_impulse, impulse_y)
+        key_sy(SQUASH, time_impulse, launch_sy)
+        squash_upright(SQUASH, time_impulse)
 
-        # ---- up diagonal rotation
-        if diag != 0.0 and t_up_diag > t_impulse:
-            pm.setKeyframe(SQUASH.rotateZ, v=diag, t=t_up_diag)
+        # Up diagonal rotation
+        if diag != 0.0 and time_up_diag > time_impulse and time_up_diag < time_peak:
+            pm.setKeyframe(SQUASH.rotateZ, v=diag, t=time_up_diag)
 
-        # ---- apex
+        # Top Apex, circle
         peak = (a + b) * 0.5
         peak.y = max(a.y, b.y) + BOUNCE_HEIGHT
-        key_xyz(t_peak, peak)
-        key_sy(t_peak, 1.0)
-        squash_upright(t_peak)
 
-        # ---- down diagonal rotation
-        if diag != 0.0 and t_down_diag < t_pre:
-            pm.setKeyframe(SQUASH.rotateZ, v=-diag, t=t_down_diag)
+        # Specific scenario
+        # For the jump in bottom left stairs, from step1 to step4, move the ball to original place
+        if not (group_a == "stairs_bottomleft_grp" and ordinal_a == 0 and ordinal_b == 1):
+            if front_z_hold is not None:
+                peak.z = (front_z_hold * (1.0 - APEX_BACK_BLEND)) + (b_raw.z * APEX_BACK_BLEND)
 
-        # ---- descent
+        key_xyz(MOVE, time_peak, peak)
+        key_sy(SQUASH, time_peak, 1.0)
+        squash_upright(SQUASH, time_peak)
+
+        # Down diagonal rotation
+        if diag != 0.0 and time_down_diag > time_peak and time_down_diag < time_pre:
+            pm.setKeyframe(SQUASH.rotateZ, v=-diag, t=time_down_diag)
+
+        # Descent into next stair
         pre_sy = 1.0 + stretch * STRETCH_PRECONTACT_MULT
-        pre_center = stair_b + (RADIUS * pre_sy) + CONTACT_EPSILON
+        pre_center = squash_contact_center(stair_b, RADIUS, pre_sy)
 
-        key_xyz(
-            t_pre,
-            pm.datatypes.Vector(b.x, pre_center, b.z)
-        )
-        key_sy(t_pre, pre_sy)
-        squash_upright(t_pre)
+        key_xyz(MOVE, time_pre, pm.datatypes.Vector(b.x, pre_center, b.z))
+        key_sy(SQUASH, time_pre, pre_sy)
+        squash_upright(SQUASH, time_pre)
 
-        # ---- contact B
-        if t_contact is not None:
+        # Contact B
+        if time_contact is not None:
             center_b = stair_b + RADIUS + CONTACT_EPSILON
-            key_xyz(
-                t_contact,
-                pm.datatypes.Vector(b.x, center_b, b.z)
-            )
-            key_sy(t_contact, 1.0)
-            squash_upright(t_contact)
+            key_xyz(MOVE, time_contact, pm.datatypes.Vector(b.x, center_b, b.z))
+            key_sy(SQUASH, time_contact, 1.0)
+            squash_upright(SQUASH, time_contact)
 
             travel = (b - a).length()
             current_roll += travel * roll_normalizer
-            pm.setKeyframe(ROTATE.rotateZ, v=current_roll, t=t_contact)
+            pm.setKeyframe(ROTATE.rotateZ, v=current_roll, t=time_contact)
 
-            frame = t_contact
+            frame = int(time_contact)
         else:
-            frame = t_pre
+            frame = int(time_pre)
 
-    # ---------------- tangents ----------------
+        # Release the fake placement after bottom left step4 (ordinal 1)
+        if group_a == "stairs_bottomleft_grp" and ordinal_b == 1:
+            front_z_hold = None
+
+    # Tangent
     pm.keyTangent(
         MOVE.translateY,
         edit=True,
@@ -296,3 +326,4 @@ def bounce_on_stairs(
 
     pm.keyTangent(SQUASH.scaleY, edit=True, itt="auto", ott="auto")
     pm.keyTangent(SQUASH.rotate, edit=True, itt="auto", ott="auto")
+

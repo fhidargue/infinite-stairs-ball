@@ -3,11 +3,13 @@ import re
 # Hang time and arc shape
 PEAK_BIAS = 0.65         
 BOUNCE_HEIGHT_MULT = 6
+JUMP_HEIGHT_SCALE = 0.6
 
 # Frame constants
 PRE_CONTACT_OFFSET = 1
 TOTAL_FRAMES = 250
-CONTACT_EPSILON = -0.05
+CONTACT_EPSILON = -0.62
+APEX_BACK_BLEND = 0.65
 
 # Squash constants
 SQUASH_FRAME_OFFSET  = 1

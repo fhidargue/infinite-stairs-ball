@@ -8,7 +8,7 @@ def create_stairs_with_base():
     depth = 1.0
     base_height = 0.4
 
-    grp = pm.group(empty=True, name="stair_grp")
+    group = pm.group(empty=True, name="stair_grp")
 
     steps = []
 
@@ -16,7 +16,7 @@ def create_stairs_with_base():
     for i in range(step_count):
         step = pm.polyCube(w=run, h=rise, d=depth, name=f"step_{i+1}")[0]
         step.t.set((i * run, -i * rise, 0))
-        step.setParent(grp)
+        step.setParent(group)
         steps.append(step)
 
     # Create base   
@@ -38,10 +38,6 @@ def create_stairs_with_base():
     mid_y = -(rise * (step_count - 1)) / 2.0
 
     base.t.set((mid_x, mid_y - vertical_offset, 0))
-    base.setParent(grp)
+    base.setParent(group)
 
-    pm.makeIdentity(grp, apply=True, t=1, r=1, s=1)
-
-    return grp
-
-create_stairs_with_base()
+    pm.makeIdentity(group, apply=True, t=1, r=1, s=1)

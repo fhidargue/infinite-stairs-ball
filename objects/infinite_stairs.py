@@ -1,5 +1,7 @@
-import pymel.core as pm
 import math
+
+import pymel.core as pm
+
 
 def create_stairs_with_base():
     step_count = 6
@@ -14,21 +16,16 @@ def create_stairs_with_base():
 
     # Create steps
     for i in range(step_count):
-        step = pm.polyCube(w=run, h=rise, d=depth, name=f"step_{i+1}")[0]
+        step = pm.polyCube(w=run, h=rise, d=depth, name=f"step_{i + 1}")[0]
         step.t.set((i * run, -i * rise, 0))
         step.setParent(group)
         steps.append(step)
 
-    # Create base   
-    diag = math.sqrt((run * step_count)**2 + (rise * step_count)**2)
+    # Create base
+    diag = math.sqrt((run * step_count) ** 2 + (rise * step_count) ** 2)
     angle = -math.degrees(math.atan(rise / run))
 
-    base = pm.polyCube(
-        w=diag,
-        h=base_height,
-        d=depth * 1.1,
-        name="base"
-    )[0]
+    base = pm.polyCube(w=diag, h=base_height, d=depth * 1.1, name="base")[0]
 
     base.rz.set(angle)
     vertical_offset = (rise / 2.0) + (base_height / 2.0)

@@ -1,14 +1,20 @@
 import math
 import pymel.core as pm
 
+from utils.brick_constants import (
+    BRICK_COUNT,
+    BRICK_HEIGHT,
+    INNER_RADIUS,
+    OUTER_RADIUS,
+    GAP_ANGLE,
+)
 
 def create_radial_brick_ring(
-    count=12,
-    inner_radius=3.5,
-    outer_radius=4.5,
-    height=0.4,
-    gap_angle_deg=1.2,
-    name_prefix="brick",
+    count=BRICK_COUNT,
+    inner_radius=INNER_RADIUS,
+    outer_radius=OUTER_RADIUS,
+    height=BRICK_HEIGHT,
+    gap_angle_deg=GAP_ANGLE,
 ):
     angle_step = 360.0 / count
     half_gap = gap_angle_deg * 0.5
@@ -87,11 +93,11 @@ def create_radial_brick_ring(
         )
 
         brick_mesh = pm.polyUnite(
-            face_nodes, ch=False, name=f"{name_prefix}_{index}"
+            face_nodes, ch=False, name=f"brick_{index}"
         )[0]
 
         pm.delete(brick_mesh, constructionHistory=True)
         bricks.append(brick_mesh)
 
-    pm.group(bricks, name=f"{name_prefix}_ring_grp")
+    pm.group(bricks, name="brick_ring_grp")
     return bricks

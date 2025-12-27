@@ -1,13 +1,15 @@
 import math
+
 import pymel.core as pm
 
 from utils.brick_constants import (
     BRICK_COUNT,
     BRICK_HEIGHT,
+    GAP_ANGLE,
     INNER_RADIUS,
     OUTER_RADIUS,
-    GAP_ANGLE,
 )
+
 
 def create_radial_brick_ring(
     count=BRICK_COUNT,
@@ -28,33 +30,35 @@ def create_radial_brick_ring(
 
         # Bottom points
         inner_start = pm.dt.Vector(
-            math.cos(start_angle_rad) * inner_radius, 0.0,
-            math.sin(start_angle_rad) * inner_radius
+            math.cos(start_angle_rad) * inner_radius,
+            0.0,
+            math.sin(start_angle_rad) * inner_radius,
         )
         inner_end = pm.dt.Vector(
-            math.cos(end_angle_rad) * inner_radius, 0.0,
-            math.sin(end_angle_rad) * inner_radius
+            math.cos(end_angle_rad) * inner_radius,
+            0.0,
+            math.sin(end_angle_rad) * inner_radius,
         )
         outer_end = pm.dt.Vector(
-            math.cos(end_angle_rad) * outer_radius, 0.0,
-            math.sin(end_angle_rad) * outer_radius
+            math.cos(end_angle_rad) * outer_radius,
+            0.0,
+            math.sin(end_angle_rad) * outer_radius,
         )
         outer_start = pm.dt.Vector(
-            math.cos(start_angle_rad) * outer_radius, 0.0,
-            math.sin(start_angle_rad) * outer_radius
+            math.cos(start_angle_rad) * outer_radius,
+            0.0,
+            math.sin(start_angle_rad) * outer_radius,
         )
 
         # Top points
         inner_start_top = inner_start + pm.dt.Vector(0, height, 0)
-        inner_end_top   = inner_end   + pm.dt.Vector(0, height, 0)
-        outer_end_top   = outer_end   + pm.dt.Vector(0, height, 0)
+        inner_end_top = inner_end + pm.dt.Vector(0, height, 0)
+        outer_end_top = outer_end + pm.dt.Vector(0, height, 0)
         outer_start_top = outer_start + pm.dt.Vector(0, height, 0)
 
         # Bottom face
         face_nodes.append(
-            pm.polyCreateFacet(
-                p=[inner_start, outer_start, outer_end, inner_end]
-            )[0]
+            pm.polyCreateFacet(p=[inner_start, outer_start, outer_end, inner_end])[0]
         )
 
         # Top face
@@ -87,14 +91,12 @@ def create_radial_brick_ring(
 
         # Side wall B
         face_nodes.append(
-            pm.polyCreateFacet(
-                p=[inner_end, outer_end, outer_end_top, inner_end_top]
-            )[0]
+            pm.polyCreateFacet(p=[inner_end, outer_end, outer_end_top, inner_end_top])[
+                0
+            ]
         )
 
-        brick_mesh = pm.polyUnite(
-            face_nodes, ch=False, name=f"brick_{index}"
-        )[0]
+        brick_mesh = pm.polyUnite(face_nodes, ch=False, name=f"brick_{index}")[0]
 
         pm.delete(brick_mesh, constructionHistory=True)
         bricks.append(brick_mesh)

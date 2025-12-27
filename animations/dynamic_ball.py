@@ -1,34 +1,42 @@
 import pymel.core as pm
 
 from utils.constants import (
-    PEAK_BIAS,
-    BOUNCE_HEIGHT_MULT,
-    PRE_CONTACT_OFFSET,
-    SQUASH_FRAME_OFFSET,
-    RECOVER_FRAME_OFFSET,
-    SQUASH_HOLD_FRAMES,
-    STRETCH_PRECONTACT_MULT,
-    STRETCH_RISE_MULT,
+    APEX_BACK_BLEND,
     APEX_TANGENT_WEIGHT,
-    VEL_NORMALIZER,
+    BOUNCE_HEIGHT_MULT,
     CONTACT_EPSILON,
     DIAG_ANGLE,
     JUMP_HEIGHT_SCALE,
-    APEX_BACK_BLEND
+    PEAK_BIAS,
+    PRE_CONTACT_OFFSET,
+    RECOVER_FRAME_OFFSET,
+    SQUASH_FRAME_OFFSET,
+    SQUASH_HOLD_FRAMES,
+    STRETCH_PRECONTACT_MULT,
+    STRETCH_RISE_MULT,
+    VEL_NORMALIZER,
+)
+from utils.utils import (
+    key_sy,
+    key_xyz,
+    key_xz,
+    key_y,
+    squash_contact_center,
+    squash_upright,
+    trailing_int,
 )
 
-from utils.utils import trailing_int, key_xyz, key_xz, key_y, key_sy, squash_upright, squash_contact_center
-
 STAIR_DIAGONAL = {
-    "stairs_topleft_grp":  DIAG_ANGLE,
+    "stairs_topleft_grp": DIAG_ANGLE,
     "stairs_bottomleft_grp": -DIAG_ANGLE,
     "stairs_bottomright_grp": -DIAG_ANGLE,
-    "stairs_topright_grp":  DIAG_ANGLE,
+    "stairs_topright_grp": DIAG_ANGLE,
 }
 
 STEP_EXCLUSIONS = {
     "stairs_bottomright_grp": {"step_1"},
 }
+
 
 def get_ball_controls(ball_rig):
     MOVE = pm.PyNode(f"{ball_rig}|move_anim")
@@ -43,13 +51,15 @@ def get_ball_controls(ball_rig):
 
     return MOVE, SQUASH, ROTATE, radius
 
+
 def collect_steps(stair_group):
     grp = pm.PyNode(stair_group)
     exclude = STEP_EXCLUSIONS.get(grp.nodeName(), set())
 
     kids = pm.listRelatives(grp, children=True, type="transform") or []
     steps = [
-        k for k in kids
+        k
+        for k in kids
         if k.nodeName().lower().startswith("step")
         and k.nodeName().lower() not in exclude
     ]
@@ -79,7 +89,7 @@ def collect_targets(ball_rig, stair_groups_in_order):
             targets.append((grp_name, step_top_center(step, radius)))
 
     return targets
-    
+
 
 def bounce_on_stairs(
     ball_rig,
@@ -131,7 +141,11 @@ def bounce_on_stairs(
 
     def visual_position(group, ordinal, pos):
         position = pm.datatypes.Vector(pos)
-        if (front_z_hold is not None) and (group == "stairs_bottomleft_grp") and (ordinal in (0, 1)):
+        if (
+            (front_z_hold is not None)
+            and (group == "stairs_bottomleft_grp")
+            and (ordinal in (0, 1))
+        ):
             position.z = front_z_hold
         return position
 
@@ -153,21 +167,25 @@ def bounce_on_stairs(
         b_raw = pm.datatypes.Vector(b_raw)
 
         FRAMES = int(durations[i])
-        is_last = (i == hop_count - 1)
+        is_last = i == hop_count - 1
 
         # Remove diagonal bounce on stair sides
-        is_group_transition = (group_a != group_b)
+        is_group_transition = group_a != group_b
         is_straight_transition = (
-            (group_a == "stairs_topleft_grp" and group_b == "stairs_bottomleft_grp") or
-            (group_a == "stairs_bottomright_grp" and group_b == "stairs_topright_grp")
-        )
+            group_a == "stairs_topleft_grp" and group_b == "stairs_bottomleft_grp"
+        ) or (group_a == "stairs_bottomright_grp" and group_b == "stairs_topright_grp")
 
         diag = STAIR_DIAGONAL.get(group_a, 0.0)
         if is_group_transition and is_straight_transition:
             diag = 0.0
 
         # Push ball forward for only the bottom left stairs
-        if group_a == "stairs_topleft_grp" and ordinal_a == 2 and group_b == "stairs_bottomleft_grp" and ordinal_b == 0:
+        if (
+            group_a == "stairs_topleft_grp"
+            and ordinal_a == 2
+            and group_b == "stairs_bottomleft_grp"
+            and ordinal_b == 0
+        ):
             dz = abs(b_raw.z - a_raw.z)
             front_z_hold = a_raw.z + (dz * 0.35) + (RADIUS * 0.25)
 
@@ -175,7 +193,9 @@ def bounce_on_stairs(
         b = visual_position(group_b, ordinal_b, b_raw)
 
         # Keep the fake palcement hold through bottom left step4 (ordinal 1).
-        clear_front_hold_after_hop = (group_a == "stairs_bottomleft_grp" and ordinal_a == 1)
+        clear_front_hold_after_hop = (
+            group_a == "stairs_bottomleft_grp" and ordinal_a == 1
+        )
 
         # Timing logic
         initial_time = int(frame)
@@ -218,10 +238,7 @@ def bounce_on_stairs(
         # Squash A
         squash_scale = 1.0 - squash
         squash_center = (
-            stair_a
-            + (RADIUS * squash_scale)
-            + CONTACT_EPSILON
-            + SQUASH_Y_OFFSET
+            stair_a + (RADIUS * squash_scale) + CONTACT_EPSILON + SQUASH_Y_OFFSET
         )
 
         for t in (time_squash, time_recover):
@@ -256,9 +273,13 @@ def bounce_on_stairs(
 
         # Specific scenario
         # For the jump in bottom left stairs, from step1 to step4, move the ball to original place
-        if not (group_a == "stairs_bottomleft_grp" and ordinal_a == 0 and ordinal_b == 1):
+        if not (
+            group_a == "stairs_bottomleft_grp" and ordinal_a == 0 and ordinal_b == 1
+        ):
             if front_z_hold is not None:
-                peak.z = (front_z_hold * (1.0 - APEX_BACK_BLEND)) + (b_raw.z * APEX_BACK_BLEND)
+                peak.z = (front_z_hold * (1.0 - APEX_BACK_BLEND)) + (
+                    b_raw.z * APEX_BACK_BLEND
+                )
 
         key_xyz(MOVE, time_peak, peak)
         key_sy(SQUASH, time_peak, 1.0)
@@ -326,4 +347,3 @@ def bounce_on_stairs(
 
     pm.keyTangent(SQUASH.scaleY, edit=True, itt="auto", ott="auto")
     pm.keyTangent(SQUASH.rotate, edit=True, itt="auto", ott="auto")
-

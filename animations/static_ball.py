@@ -1,4 +1,5 @@
 import random
+
 import pymel.core as pm
 
 
@@ -27,7 +28,9 @@ def bounce(ball_rig, ball_type="tennis", move_forward=False):
 
     MOVE_CTRL = pm.PyNode(f"{ball_rig}|move_anim")
     SQUASH_CTRL = pm.PyNode(f"{ball_rig}|move_anim|squash_stretch_axis_anim")
-    ROTATE_CTRL = pm.PyNode(f"{ball_rig}|move_anim|squash_stretch_axis_anim|cancel_rotations_grp|rotate_anim")
+    ROTATE_CTRL = pm.PyNode(
+        f"{ball_rig}|move_anim|squash_stretch_axis_anim|cancel_rotations_grp|rotate_anim"
+    )
     RADIUS = (bbox.max().y - bbox.min().y) / 2.0
 
     ball_properties = {
@@ -38,7 +41,13 @@ def bounce(ball_rig, ball_type="tennis", move_forward=False):
             "frames_to_fall": 10,
             "squash": 0.2,
         },
-        "beach": {"position_y": 12, "ground_friction": 0.15, "air_friction": 0.05, "frames_to_fall": 10, "squash": 0.5},
+        "beach": {
+            "position_y": 12,
+            "ground_friction": 0.15,
+            "air_friction": 0.05,
+            "frames_to_fall": 10,
+            "squash": 0.5,
+        },
         "bowling": {
             "position_y": 12,
             "ground_friction": 0.7,
@@ -117,7 +126,9 @@ def bounce(ball_rig, ball_type="tennis", move_forward=False):
             pm.setKeyframe(MOVE_CTRL.translateY, t=t)
         else:
             # Stretch the ball reducing power
-            height_norm = max(0.0, min(1.0, (p - POSITION_FLOOR) / (initial_height - POSITION_FLOOR)))
+            height_norm = max(
+                0.0, min(1.0, (p - POSITION_FLOOR) / (initial_height - POSITION_FLOOR))
+            )
             bounce_factor = 1 - (i / len(positions)) * 0.5
             current_squash = squash_factor * bounce_factor
 
@@ -140,7 +151,13 @@ def bounce(ball_rig, ball_type="tennis", move_forward=False):
         pm.setKeyframe(ROTATE_CTRL.rotateZ, v=current_rot + rot_amount, t=t)
 
     # Clean tangents
-    pm.keyTangent(MOVE_CTRL.translateY, edit=True, weightedTangents=True, itt="spline", ott="spline")
+    pm.keyTangent(
+        MOVE_CTRL.translateY,
+        edit=True,
+        weightedTangents=True,
+        itt="spline",
+        ott="spline",
+    )
 
     # Floor should be linear
     floor_keys = [t for t, y in zip(times, positions) if y == POSITION_FLOOR]
@@ -177,8 +194,5 @@ def bounce(ball_rig, ball_type="tennis", move_forward=False):
     MOVE_CTRL.translateY.set(1.0)
     pm.setKeyframe(MOVE_CTRL.translateY, t=final_frame)
 
-bounce(
-    ball_rig="ball_rig",
-    ball_type="tennis",
-    move_forward=False
-)
+
+bounce(ball_rig="ball_rig", ball_type="tennis", move_forward=False)

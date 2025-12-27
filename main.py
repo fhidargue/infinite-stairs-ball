@@ -1,5 +1,7 @@
 from animations.dynamic_ball import bounce_on_stairs
 from objects.infinite_stairs import create_stairs_with_base
+from objects.circle_bricks import create_radial_brick_ring
+from objects.torii_corridor import build_torii_sequence
 from utils.constants import VEL_NORMALIZER, TOTAL_FRAMES, SQUASH, STRETCH
 
 STAIR_GROUPS = [
@@ -21,3 +23,15 @@ def run_bounce():
 
 def create_stairs():
     create_stairs_with_base()
+
+def create_circle_brick():
+    create_radial_brick_ring(
+        count=12,
+        inner_radius=3.5,
+        outer_radius=4.5,
+        height=0.4,
+        gap_angle_deg=1.2
+    )
+
+def create_torii_corridor():
+    build_torii_sequence()

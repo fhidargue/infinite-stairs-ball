@@ -15,6 +15,7 @@ from utils.constants import (
     STRETCH_PRECONTACT_MULT,
     STRETCH_RISE_MULT,
     VEL_NORMALIZER,
+    STAIR_DIAGONAL,
 )
 from utils.utils import (
     key_sy,
@@ -25,17 +26,6 @@ from utils.utils import (
     squash_upright,
     trailing_int,
 )
-
-STAIR_DIAGONAL = {
-    "stairs_topleft_grp": DIAG_ANGLE,
-    "stairs_bottomleft_grp": -DIAG_ANGLE,
-    "stairs_bottomright_grp": -DIAG_ANGLE,
-    "stairs_topright_grp": DIAG_ANGLE,
-}
-
-STEP_EXCLUSIONS = {
-    "stairs_bottomright_grp": {"step_1"},
-}
 
 
 def get_ball_controls(ball_rig):
@@ -52,9 +42,9 @@ def get_ball_controls(ball_rig):
     return MOVE, SQUASH, ROTATE, radius
 
 
-def collect_steps(stair_group):
+def collect_steps(stair_group, excluded_stairs):
     grp = pm.PyNode(stair_group)
-    exclude = STEP_EXCLUSIONS.get(grp.nodeName(), set())
+    exclude = excluded_stairs.get(grp.nodeName(), set())
 
     kids = pm.listRelatives(grp, children=True, type="transform") or []
     steps = [
@@ -77,16 +67,40 @@ def step_top_center(step, radius):
     )
 
 
-def collect_targets(ball_rig, stair_groups_in_order):
+def collect_targets(ball_rig, stair_groups_in_order, excluded_stairs, start_overrides=None):
     _, _, _, radius = get_ball_controls(ball_rig)
+    visit_counts = {}
     targets = []
 
-    for grp_name in stair_groups_in_order:
-        for step in collect_steps(grp_name):
+    for group_name in stair_groups_in_order:
+        visit_counts.setdefault(group_name, 0)
+        steps = collect_steps(group_name, excluded_stairs)
+
+        # Only override if it's the first visit
+        if (
+            start_overrides
+            and visit_counts[group_name] == 0
+            and group_name in start_overrides
+        ):
+            start_step_name = str(start_overrides[group_name]).lower()
+            start_index = next(
+                (i for i, step in enumerate(steps) if step.nodeName().lower() == start_step_name),
+                None,
+            )
+            if start_index is not None:
+                steps = steps[start_index:]
+            else:
+                pm.warning(
+                    f"Start override step '{start_step_name}' not found in {group_name}."
+                )
+
+        visit_counts[group_name] += 1
+
+        for step in steps:
             step_num = trailing_int(step.nodeName())
             if (step_num - 1) % 3 != 0:
                 continue
-            targets.append((grp_name, step_top_center(step, radius)))
+            targets.append((group_name, step_top_center(step, radius)))
 
     return targets
 
@@ -94,18 +108,25 @@ def collect_targets(ball_rig, stair_groups_in_order):
 def bounce_on_stairs(
     ball_rig,
     stair_groups_in_order,
+    excluded_stairs,
     start_frame=1,
     total_frames=250,
     squash=0.38,
     stretch=0.40,
     roll_normalizer=VEL_NORMALIZER,
+    start_overrides=None,
 ):
     MOVE, SQUASH, ROTATE, RADIUS = get_ball_controls(ball_rig)
     BOUNCE_HEIGHT = RADIUS * BOUNCE_HEIGHT_MULT * JUMP_HEIGHT_SCALE
     SQUASH_Y_OFFSET = 0.15 * RADIUS
     POST_SQUASH_Y_OFFSET = 0.15 * RADIUS
 
-    targets = collect_targets(ball_rig, stair_groups_in_order)
+    targets = collect_targets(
+        ball_rig,
+        stair_groups_in_order,
+        excluded_stairs,
+        start_overrides=start_overrides,
+    )
     hop_count = len(targets) - 1
 
     if len(targets) < 2:
@@ -125,26 +146,42 @@ def bounce_on_stairs(
     current_roll = ROTATE.rotateZ.get()
     frame = int(start_frame)
 
-    # Precompute stairs into indexes for the jumps
-    # For example: stair1 = 0, stair4 = 1 and stair7 = 2 (3 bounces per stair group)
     ordinals = []
-    counts = {}
+    local_ordinals = []
+    visit_index = []
 
-    for group_name, _pos in targets:
-        counts.setdefault(group_name, 0)
-        ordinals.append(counts[group_name])
-        counts[group_name] += 1
+    counts_global = {}
+    counts_local_by_visit = {}  
+    visit_counts = {}     
+    last_group = None
 
-    # Front hold state for the bottom left stairs
-    # The ball will bounce in front of the stairs, simulating placement
+    for group_name, _ in targets:
+        counts_global.setdefault(group_name, 0)
+        ordinals.append(counts_global[group_name])
+        counts_global[group_name] += 1
+
+        # Visit number increments when group changes
+        if group_name != last_group:
+            visit_counts[group_name] = visit_counts.get(group_name, -1) + 1
+        v = visit_counts[group_name]
+        visit_index.append(v)
+
+        # Local ordinal resets per visit
+        key = (group_name, v)
+        counts_local_by_visit.setdefault(key, 0)
+        local_ordinals.append(counts_local_by_visit[key])
+        counts_local_by_visit[key] += 1
+
+        last_group = group_name
+        
     front_z_hold = None
 
-    def visual_position(group, ordinal, pos):
+    def visual_position(group, ordinal_for_visual, pos):
         position = pm.datatypes.Vector(pos)
         if (
             (front_z_hold is not None)
             and (group == "stairs_bottomleft_grp")
-            and (ordinal in (0, 1))
+            and (ordinal_for_visual in (0, 1))
         ):
             position.z = front_z_hold
         return position
@@ -160,8 +197,12 @@ def bounce_on_stairs(
     for i in range(hop_count):
         group_a, a_raw = targets[i]
         group_b, b_raw = targets[i + 1]
+
         ordinal_a = ordinals[i]
         ordinal_b = ordinals[i + 1]
+
+        local_a = local_ordinals[i]
+        local_b = local_ordinals[i + 1]
 
         a_raw = pm.datatypes.Vector(a_raw)
         b_raw = pm.datatypes.Vector(b_raw)
@@ -180,22 +221,22 @@ def bounce_on_stairs(
             diag = 0.0
 
         # Push ball forward for only the bottom left stairs
+        # Use local ordinals so it works on later visits too
         if (
             group_a == "stairs_topleft_grp"
-            and ordinal_a == 2
+            and local_a == 2
             and group_b == "stairs_bottomleft_grp"
-            and ordinal_b == 0
+            and local_b == 0
         ):
             dz = abs(b_raw.z - a_raw.z)
             front_z_hold = a_raw.z + (dz * 0.35) + (RADIUS * 0.25)
 
-        a = visual_position(group_a, ordinal_a, a_raw)
-        b = visual_position(group_b, ordinal_b, b_raw)
+        # For the bottom-left fake placement
+        a_ord_for_visual = local_a if group_a == "stairs_bottomleft_grp" else ordinal_a
+        b_ord_for_visual = local_b if group_b == "stairs_bottomleft_grp" else ordinal_b
 
-        # Keep the fake palcement hold through bottom left step4 (ordinal 1).
-        clear_front_hold_after_hop = (
-            group_a == "stairs_bottomleft_grp" and ordinal_a == 1
-        )
+        a = visual_position(group_a, a_ord_for_visual, a_raw)
+        b = visual_position(group_b, b_ord_for_visual, b_raw)
 
         # Timing logic
         initial_time = int(frame)
@@ -271,10 +312,8 @@ def bounce_on_stairs(
         peak = (a + b) * 0.5
         peak.y = max(a.y, b.y) + BOUNCE_HEIGHT
 
-        # Specific scenario
-        # For the jump in bottom left stairs, from step1 to step4, move the ball to original place
         if not (
-            group_a == "stairs_bottomleft_grp" and ordinal_a == 0 and ordinal_b == 1
+            group_a == "stairs_bottomleft_grp" and local_a == 0 and local_b == 1
         ):
             if front_z_hold is not None:
                 peak.z = (front_z_hold * (1.0 - APEX_BACK_BLEND)) + (
@@ -312,11 +351,10 @@ def bounce_on_stairs(
         else:
             frame = int(time_pre)
 
-        # Release the fake placement after bottom left step4 (ordinal 1)
-        if group_a == "stairs_bottomleft_grp" and ordinal_b == 1:
+        if group_a == "stairs_bottomleft_grp" and local_b == 1:
             front_z_hold = None
 
-    # Tangent
+    # Tangent configuration
     pm.keyTangent(
         MOVE.translateY,
         edit=True,

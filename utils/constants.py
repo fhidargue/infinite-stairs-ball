@@ -32,3 +32,35 @@ DIAG_ANGLE = 22.0
 
 # Regex
 DIGIT_REGEX = re.compile(r"(\d+)$")
+
+# Stair configuration
+STAIR_DIAGONAL = {
+    "stairs_topleft_grp": DIAG_ANGLE,
+    "stairs_bottomleft_grp": -DIAG_ANGLE,
+    "stairs_bottomright_grp": -DIAG_ANGLE,
+    "stairs_topright_grp": DIAG_ANGLE,
+}
+
+STAIR_GROUPS = [
+    "stairs_topleft_grp",
+    "stairs_bottomleft_grp",
+    "stairs_bottomright_grp",
+    "stairs_topright_grp",
+]
+
+STAIR_GROUPS_2 = [
+    "stairs_bottomleft_grp", 
+    "stairs_bottomright_grp",
+    "stairs_topright_grp",
+    "stairs_topleft_grp",
+    "stairs_bottomleft_grp",
+]
+
+STEP_EXCLUSIONS = {
+    "stairs_bottomright_grp": {"step_1"},
+}
+
+STEP_EXCLUSIONS_2 = {
+    "stairs_bottomright_grp": {"step_1"},
+    "stairs_topright_grp": {"step_7"},
+}

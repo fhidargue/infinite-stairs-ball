@@ -2,26 +2,30 @@ from animations.dynamic_ball import bounce_on_stairs
 from objects.circle_bricks import create_radial_brick_ring
 from objects.infinite_stairs import create_stairs_with_base
 from objects.torii_corridor import build_torii_sequence
-from utils.constants import SQUASH, STRETCH, TOTAL_FRAMES
-
-STAIR_GROUPS = [
-    "stairs_topleft_grp",
-    "stairs_bottomleft_grp",
-    "stairs_bottomright_grp",
-    "stairs_topright_grp",
-]
-
+from utils.constants import SQUASH, STRETCH, TOTAL_FRAMES, STAIR_GROUPS, STEP_EXCLUSIONS, STAIR_GROUPS_2, STEP_EXCLUSIONS_2
 
 def run_bounce():
     bounce_on_stairs(
         ball_rig="ball_rig",
         stair_groups_in_order=STAIR_GROUPS,
+        excluded_stairs=STEP_EXCLUSIONS,
         start_frame=1,
         total_frames=TOTAL_FRAMES,
         squash=SQUASH,
         stretch=STRETCH,
     )
 
+def run_bounce_second_ball():
+    bounce_on_stairs(
+        ball_rig="ball_rig_1",
+        stair_groups_in_order=STAIR_GROUPS_2,
+        excluded_stairs=STEP_EXCLUSIONS_2,
+        start_overrides={"stairs_bottomleft_grp": "step_7"},
+        start_frame=1,
+        total_frames=TOTAL_FRAMES,
+        squash=SQUASH,
+        stretch=STRETCH,
+    )
 
 def create_stairs():
     create_stairs_with_base()

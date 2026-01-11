@@ -25,6 +25,8 @@ def run_bounce_second_ball():
         total_frames=TOTAL_FRAMES,
         squash=SQUASH,
         stretch=STRETCH,
+        jump_power=2.15,
+        squash_hold_mult=1.6
     )
 
 def create_stairs():

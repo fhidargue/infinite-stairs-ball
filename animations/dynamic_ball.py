@@ -137,6 +137,8 @@ def bounce_on_stairs(
     roll_normalizer=VEL_NORMALIZER,
     start_overrides=None,
     step_sequence=None,
+    jump_power=1.0,
+    squash_hold_mult=1.0,
 ):
     MOVE, SQUASH, ROTATE, RADIUS = get_ball_controls(ball_rig)
     BOUNCE_HEIGHT = RADIUS * BOUNCE_HEIGHT_MULT * JUMP_HEIGHT_SCALE
@@ -277,7 +279,9 @@ def bounce_on_stairs(
         initial_time = int(frame)
         time_squash = initial_time + int(SQUASH_FRAME_OFFSET)
         time_recover = initial_time + int(RECOVER_FRAME_OFFSET)
-        time_launch = time_recover + int(SQUASH_HOLD_FRAMES)
+
+        hold = int(round(SQUASH_HOLD_FRAMES * float(squash_hold_mult)))
+        time_launch = time_recover + hold
         time_impulse = time_launch + 1
 
         time_peak = initial_time + int(FRAMES * PEAK_BIAS)
@@ -312,7 +316,12 @@ def bounce_on_stairs(
         squash_upright(SQUASH, initial_time)
 
         # Squash A
-        squash_scale = 1.0 - squash
+        squash_depth_mult = 1.0 + (float(squash_hold_mult) - 1.0) * 0.5
+        squash_scale = 1.0 - (squash * squash_depth_mult)
+        
+        # Safety logic to avoid negative or zero values
+        squash_scale = max(0.05, squash_scale)
+
         squash_center = (
             stair_a + (RADIUS * squash_scale) + CONTACT_EPSILON + SQUASH_Y_OFFSET
         )
@@ -333,7 +342,8 @@ def bounce_on_stairs(
         squash_upright(SQUASH, time_launch)
 
         # Impulse upwards
-        impulse_y = center_a + (BOUNCE_HEIGHT * 0.18)
+        # impulse_y = center_a + (BOUNCE_HEIGHT * 0.18)
+        impulse_y = center_a + (BOUNCE_HEIGHT * 0.18 * float(jump_power))
         key_xz(MOVE, time_impulse, a)
         key_y(MOVE, time_impulse, impulse_y)
         key_sy(SQUASH, time_impulse, launch_sy)

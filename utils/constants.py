@@ -48,19 +48,16 @@ STAIR_GROUPS = [
     "stairs_topright_grp",
 ]
 
-STAIR_GROUPS_2 = [
-    "stairs_bottomleft_grp", 
-    "stairs_bottomright_grp",
-    "stairs_topright_grp",
-    "stairs_topleft_grp",
-    "stairs_bottomleft_grp",
-]
-
 STEP_EXCLUSIONS = {
     "stairs_bottomright_grp": {"step_1"},
 }
 
-STEP_EXCLUSIONS_2 = {
-    "stairs_bottomright_grp": {"step_1"},
-    "stairs_topright_grp": {"step_7"},
-}
+BALL2_SEQUENCE = [
+    ("stairs_bottomleft_grp", 7),
+    ("stairs_bottomright_grp", 7),
+    ("stairs_topright_grp", 1),
+    ("stairs_topleft_grp", 1),
+    ("stairs_topleft_grp", 7),
+    ("stairs_bottomleft_grp", 1),
+    ("stairs_bottomleft_grp", 7),
+]

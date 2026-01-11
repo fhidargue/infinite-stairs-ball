@@ -104,6 +104,27 @@ def collect_targets(ball_rig, stair_groups_in_order, excluded_stairs, start_over
 
     return targets
 
+def collect_targets_from_sequence(ball_rig, step_sequence):
+    _, _, _, radius = get_ball_controls(ball_rig)
+    targets = []
+
+    for group_name, step_num in step_sequence:
+        grp = pm.PyNode(group_name)
+        kids = pm.listRelatives(grp, children=True, type="transform") or []
+        step_name = f"step_{int(step_num)}"
+
+        step = next(
+            (k for k in kids if k.nodeName().lower() == step_name),
+            None,
+        )
+
+        if not step:
+            pm.warning(f"{step_name} not found under {group_name}, skipping.")
+            continue
+
+        targets.append((group_name, step_top_center(step, radius)))
+
+    return targets
 
 def bounce_on_stairs(
     ball_rig,
@@ -115,18 +136,23 @@ def bounce_on_stairs(
     stretch=0.40,
     roll_normalizer=VEL_NORMALIZER,
     start_overrides=None,
+    step_sequence=None,
 ):
     MOVE, SQUASH, ROTATE, RADIUS = get_ball_controls(ball_rig)
     BOUNCE_HEIGHT = RADIUS * BOUNCE_HEIGHT_MULT * JUMP_HEIGHT_SCALE
     SQUASH_Y_OFFSET = 0.15 * RADIUS
     POST_SQUASH_Y_OFFSET = 0.15 * RADIUS
 
-    targets = collect_targets(
-        ball_rig,
-        stair_groups_in_order,
-        excluded_stairs,
-        start_overrides=start_overrides,
-    )
+    if step_sequence is not None:
+        targets = collect_targets_from_sequence(ball_rig, step_sequence)
+    else:
+        targets = collect_targets(
+            ball_rig,
+            stair_groups_in_order,
+            excluded_stairs,
+            start_overrides=start_overrides,
+        )
+
     hop_count = len(targets) - 1
 
     if len(targets) < 2:
@@ -151,8 +177,8 @@ def bounce_on_stairs(
     visit_index = []
 
     counts_global = {}
-    counts_local_by_visit = {}  
-    visit_counts = {}     
+    counts_local_by_visit = {}
+    visit_counts = {}
     last_group = None
 
     for group_name, _ in targets:
@@ -173,7 +199,7 @@ def bounce_on_stairs(
         counts_local_by_visit[key] += 1
 
         last_group = group_name
-        
+
     front_z_hold = None
 
     def visual_position(group, ordinal_for_visual, pos):
@@ -225,6 +251,15 @@ def bounce_on_stairs(
         if (
             group_a == "stairs_topleft_grp"
             and local_a == 2
+            and group_b == "stairs_bottomleft_grp"
+            and local_b == 0
+        ):
+            dz = abs(b_raw.z - a_raw.z)
+            front_z_hold = a_raw.z + (dz * 0.35) + (RADIUS * 0.25)
+
+        # Make sure we compute placement on custom step sequence
+        if (
+            front_z_hold is None
             and group_b == "stairs_bottomleft_grp"
             and local_b == 0
         ):

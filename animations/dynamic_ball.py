@@ -43,10 +43,10 @@ def get_ball_controls(ball_rig):
 
 
 def collect_steps(stair_group, excluded_stairs):
-    grp = pm.PyNode(stair_group)
-    exclude = excluded_stairs.get(grp.nodeName(), set())
+    group = pm.PyNode(stair_group)
+    exclude = excluded_stairs.get(group.nodeName(), set())
 
-    kids = pm.listRelatives(grp, children=True, type="transform") or []
+    kids = pm.listRelatives(group, children=True, type="transform") or []
     steps = [
         k
         for k in kids
@@ -109,8 +109,8 @@ def collect_targets_from_sequence(ball_rig, step_sequence):
     targets = []
 
     for group_name, step_num in step_sequence:
-        grp = pm.PyNode(group_name)
-        kids = pm.listRelatives(grp, children=True, type="transform") or []
+        group = pm.PyNode(group_name)
+        kids = pm.listRelatives(group, children=True, type="transform") or []
         step_name = f"step_{int(step_num)}"
 
         step = next(

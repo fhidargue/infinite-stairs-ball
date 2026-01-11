@@ -43,10 +43,10 @@ def get_ball_controls(ball_rig):
 
 
 def collect_steps(stair_group, excluded_stairs):
-    grp = pm.PyNode(stair_group)
-    exclude = excluded_stairs.get(grp.nodeName(), set())
+    group = pm.PyNode(stair_group)
+    exclude = excluded_stairs.get(group.nodeName(), set())
 
-    kids = pm.listRelatives(grp, children=True, type="transform") or []
+    kids = pm.listRelatives(group, children=True, type="transform") or []
     steps = [
         k
         for k in kids
@@ -104,6 +104,27 @@ def collect_targets(ball_rig, stair_groups_in_order, excluded_stairs, start_over
 
     return targets
 
+def collect_targets_from_sequence(ball_rig, step_sequence):
+    _, _, _, radius = get_ball_controls(ball_rig)
+    targets = []
+
+    for group_name, step_num in step_sequence:
+        group = pm.PyNode(group_name)
+        kids = pm.listRelatives(group, children=True, type="transform") or []
+        step_name = f"step_{int(step_num)}"
+
+        step = next(
+            (k for k in kids if k.nodeName().lower() == step_name),
+            None,
+        )
+
+        if not step:
+            pm.warning(f"{step_name} not found under {group_name}, skipping.")
+            continue
+
+        targets.append((group_name, step_top_center(step, radius)))
+
+    return targets
 
 def bounce_on_stairs(
     ball_rig,
@@ -115,18 +136,25 @@ def bounce_on_stairs(
     stretch=0.40,
     roll_normalizer=VEL_NORMALIZER,
     start_overrides=None,
+    step_sequence=None,
+    jump_power=1.0,
+    squash_hold_mult=1.0,
 ):
     MOVE, SQUASH, ROTATE, RADIUS = get_ball_controls(ball_rig)
     BOUNCE_HEIGHT = RADIUS * BOUNCE_HEIGHT_MULT * JUMP_HEIGHT_SCALE
     SQUASH_Y_OFFSET = 0.15 * RADIUS
     POST_SQUASH_Y_OFFSET = 0.15 * RADIUS
 
-    targets = collect_targets(
-        ball_rig,
-        stair_groups_in_order,
-        excluded_stairs,
-        start_overrides=start_overrides,
-    )
+    if step_sequence is not None:
+        targets = collect_targets_from_sequence(ball_rig, step_sequence)
+    else:
+        targets = collect_targets(
+            ball_rig,
+            stair_groups_in_order,
+            excluded_stairs,
+            start_overrides=start_overrides,
+        )
+
     hop_count = len(targets) - 1
 
     if len(targets) < 2:
@@ -151,8 +179,8 @@ def bounce_on_stairs(
     visit_index = []
 
     counts_global = {}
-    counts_local_by_visit = {}  
-    visit_counts = {}     
+    counts_local_by_visit = {}
+    visit_counts = {}
     last_group = None
 
     for group_name, _ in targets:
@@ -173,7 +201,7 @@ def bounce_on_stairs(
         counts_local_by_visit[key] += 1
 
         last_group = group_name
-        
+
     front_z_hold = None
 
     def visual_position(group, ordinal_for_visual, pos):
@@ -231,6 +259,15 @@ def bounce_on_stairs(
             dz = abs(b_raw.z - a_raw.z)
             front_z_hold = a_raw.z + (dz * 0.35) + (RADIUS * 0.25)
 
+        # Make sure we compute placement on custom step sequence
+        if (
+            front_z_hold is None
+            and group_b == "stairs_bottomleft_grp"
+            and local_b == 0
+        ):
+            dz = abs(b_raw.z - a_raw.z)
+            front_z_hold = a_raw.z + (dz * 0.35) + (RADIUS * 0.25)
+
         # For the bottom-left fake placement
         a_ord_for_visual = local_a if group_a == "stairs_bottomleft_grp" else ordinal_a
         b_ord_for_visual = local_b if group_b == "stairs_bottomleft_grp" else ordinal_b
@@ -242,7 +279,9 @@ def bounce_on_stairs(
         initial_time = int(frame)
         time_squash = initial_time + int(SQUASH_FRAME_OFFSET)
         time_recover = initial_time + int(RECOVER_FRAME_OFFSET)
-        time_launch = time_recover + int(SQUASH_HOLD_FRAMES)
+
+        hold = int(round(SQUASH_HOLD_FRAMES * float(squash_hold_mult)))
+        time_launch = time_recover + hold
         time_impulse = time_launch + 1
 
         time_peak = initial_time + int(FRAMES * PEAK_BIAS)
@@ -277,7 +316,12 @@ def bounce_on_stairs(
         squash_upright(SQUASH, initial_time)
 
         # Squash A
-        squash_scale = 1.0 - squash
+        squash_depth_mult = 1.0 + (float(squash_hold_mult) - 1.0) * 0.5
+        squash_scale = 1.0 - (squash * squash_depth_mult)
+        
+        # Safety logic to avoid negative or zero values
+        squash_scale = max(0.05, squash_scale)
+
         squash_center = (
             stair_a + (RADIUS * squash_scale) + CONTACT_EPSILON + SQUASH_Y_OFFSET
         )
@@ -298,7 +342,8 @@ def bounce_on_stairs(
         squash_upright(SQUASH, time_launch)
 
         # Impulse upwards
-        impulse_y = center_a + (BOUNCE_HEIGHT * 0.18)
+        # impulse_y = center_a + (BOUNCE_HEIGHT * 0.18)
+        impulse_y = center_a + (BOUNCE_HEIGHT * 0.18 * float(jump_power))
         key_xz(MOVE, time_impulse, a)
         key_y(MOVE, time_impulse, impulse_y)
         key_sy(SQUASH, time_impulse, launch_sy)

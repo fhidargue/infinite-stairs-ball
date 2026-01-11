@@ -4,11 +4,11 @@ This project is a small Maya / PyMEL toolkit used to build environment geometry 
 
 ## Project Structure
 - main.py
-- circle_bricks.py
-- infinite_stairs.py
-- torii_corridor.py
-- dynamic_ball.py
-- static_ball.py
+- objects/circle_bricks.py
+- objects/infinite_stairs.py
+- objects/torii_corridor.py
+- animations/dynamic_ball.py
+- animations/static_ball.py
 
 ## main.py
 Acts as the entry point for the scene.

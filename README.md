@@ -2,8 +2,6 @@
 
 This project is a small Maya / PyMEL toolkit used to build environment geometry and drive procedural ball animations over infinite stair based layouts.
 
----
-
 ## Project Structure
 - main.py
 - circle_bricks.py
@@ -11,8 +9,6 @@ This project is a small Maya / PyMEL toolkit used to build environment geometry 
 - torii_corridor.py
 - dynamic_ball.py
 - static_ball.py
-
----
 
 ## main.py
 Acts as the entry point for the scene.
@@ -23,16 +19,12 @@ Acts as the entry point for the scene.
   - Primary ball using automatic stair traversal
   - Secondary ball using a custom step sequence
 
----
-
 ## circle_bricks.py
 Creates a radial ring of brick meshes.
 
 - Builds wedge shaped bricks using polygon facets
 - Arranges bricks in a circle with small angular gaps
 - Unites faces per brick and groups them under a single transform
-
----
 
 ## infinite_stairs.py
 Builds a simple stair module.
@@ -41,8 +33,6 @@ Builds a simple stair module.
 - Adds a diagonal base under the stairs
 - Parents all parts under a single stair group
 
----
-
 ## torii_corridor.py
 Builds a corridor of torii gates and stairs.
 
@@ -50,8 +40,6 @@ Builds a corridor of torii gates and stairs.
 - Generates a staircase chain behind the corridor
 - Optionally places torii gates along the stairs
 - Groups all generated objects under one root node
-
----
 
 ## dynamic_ball.py
 Main procedural animation system for balls bouncing on stairs.
@@ -68,8 +56,6 @@ Main procedural animation system for balls bouncing on stairs.
 - Handles special placement logic for `bottom-left` stairs
 - Cleans animation curves (linear contacts, weighted apex tangents)
 
----
-
 ## static_ball.py
 Simpler bounce animation for a ball on a flat surface.
 
@@ -77,8 +63,6 @@ Simpler bounce animation for a ball on a flat surface.
 - Keys vertical motion with squash and stretch
 - Adds rolling based on bounce velocity
 - Cleans tangents for contacts and peaks
-
----
 
 ## Animation Concepts
 

@@ -139,6 +139,7 @@ def bounce_on_stairs(
     step_sequence=None,
     jump_power=1.0,
     squash_hold_mult=1.0,
+    impulse_ratio=0.35,
 ):
     MOVE, SQUASH, ROTATE, RADIUS = get_ball_controls(ball_rig)
     BOUNCE_HEIGHT = RADIUS * BOUNCE_HEIGHT_MULT * JUMP_HEIGHT_SCALE
@@ -318,7 +319,7 @@ def bounce_on_stairs(
         # Squash A
         squash_depth_mult = 1.0 + (float(squash_hold_mult) - 1.0) * 0.5
         squash_scale = 1.0 - (squash * squash_depth_mult)
-        
+
         # Safety logic to avoid negative or zero values
         squash_scale = max(0.05, squash_scale)
 
@@ -341,9 +342,11 @@ def bounce_on_stairs(
         key_sy(SQUASH, time_launch, launch_sy)
         squash_upright(SQUASH, time_launch)
 
-        # Impulse upwards
-        # impulse_y = center_a + (BOUNCE_HEIGHT * 0.18)
-        impulse_y = center_a + (BOUNCE_HEIGHT * 0.18 * float(jump_power))
+        # Target apex height for this hop
+        peak_y = max(a.y, b.y) + (BOUNCE_HEIGHT * float(jump_power))
+
+        # Impulse upwards (based on the target apex height)
+        impulse_y = center_a + ((peak_y - center_a) * float(impulse_ratio))
         key_xz(MOVE, time_impulse, a)
         key_y(MOVE, time_impulse, impulse_y)
         key_sy(SQUASH, time_impulse, launch_sy)
@@ -355,7 +358,7 @@ def bounce_on_stairs(
 
         # Top Apex, circle
         peak = (a + b) * 0.5
-        peak.y = max(a.y, b.y) + BOUNCE_HEIGHT
+        peak.y = peak_y
 
         if not (
             group_a == "stairs_bottomleft_grp" and local_a == 0 and local_b == 1

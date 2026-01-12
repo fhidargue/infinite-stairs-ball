@@ -122,7 +122,17 @@ def collect_targets_from_sequence(ball_rig, step_sequence):
             pm.warning(f"{step_name} not found under {group_name}, skipping.")
             continue
 
-        targets.append((group_name, step_top_center(step, radius)))
+        pos = step_top_center(step, radius)
+
+        # Fixes second ball entering the top right step 1
+        if (
+            ball_rig == "ball_rig_1"
+            and group_name == "stairs_topright_grp"
+            and int(step_num) == 1
+        ):
+            pos.z -= radius * 0.35
+
+        targets.append((group_name, pos))
 
     return targets
 

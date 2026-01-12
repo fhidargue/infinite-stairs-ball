@@ -26,12 +26,16 @@ Creates a radial ring of brick meshes.
 - Arranges bricks in a circle with small angular gaps
 - Unites faces per brick and groups them under a single transform
 
+![Circle Bricks](images/brick_circle.png)
+
 ## infinite_stairs.py
 Builds a simple stair module.
 
 - Creates stepped cubes with incremental rise and run
 - Adds a diagonal base under the stairs
 - Parents all parts under a single stair group
+
+![Step Initial Setup](images/stairs.png)
 
 ## torii_corridor.py
 Builds a corridor of torii gates and stairs.
@@ -40,6 +44,12 @@ Builds a corridor of torii gates and stairs.
 - Generates a staircase chain behind the corridor
 - Optionally places torii gates along the stairs
 - Groups all generated objects under one root node
+
+*Notes*
+- For this corridor to work, we need to have an intial `torii_gate_0` object rotated 90 deg in Y
+- This `obj` can be found inside the `/assets` directory
+
+![Torii Corridor](images/torii_corridor.png)
 
 ## dynamic_ball.py
 Main procedural animation system for balls bouncing on stairs.

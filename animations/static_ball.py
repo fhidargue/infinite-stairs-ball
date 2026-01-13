@@ -4,6 +4,14 @@ import pymel.core as pm
 
 
 def bounce(ball_rig, ball_type="tennis", move_forward=False):
+    """
+    Animates a bouncing ball rig in the scene.
+
+    Args:
+        ball_rig (str): The name of the ball rig to animate.
+        ball_type (str): The type of ball (e.g., "tennis", "beach", "bowling").
+        move_forward (bool): Whether the ball should move forward with each bounce.
+    """
     POSITION_FLOOR = 1
     INITIAL_FRAME = 1
     VEL_NORMALIZER = 60

@@ -5,6 +5,9 @@ from objects.torii_corridor import build_torii_sequence
 from utils.constants import SQUASH, STRETCH, TOTAL_FRAMES, STAIR_GROUPS, STEP_EXCLUSIONS, BALL2_SEQUENCE
 
 def run_bounce():
+    """
+    Runs the bounce animation for the primary ball rig.
+    """
     bounce_on_stairs(
         ball_rig="ball_rig",
         stair_groups_in_order=STAIR_GROUPS,
@@ -16,6 +19,9 @@ def run_bounce():
     )
 
 def run_bounce_second_ball():
+    """
+    Runs the bounce animation for the second ball rig.
+    """
     bounce_on_stairs(
         ball_rig="ball_rig_1",
         stair_groups_in_order=[],
@@ -31,12 +37,21 @@ def run_bounce_second_ball():
     )
 
 def create_stairs():
+    """
+    Creates the infinite stairs with a base in the scene.
+    """
     create_stairs_with_base()
 
 
 def create_circle_brick():
+    """
+    Creates a radial ring of bricks in the scene.
+    """
     create_radial_brick_ring()
 
 
 def create_torii_corridor():
+    """
+    Creates a torii corridor with stairs in the scene.
+    """
     build_torii_sequence()

@@ -18,6 +18,16 @@ def create_radial_brick_ring(
     height=BRICK_HEIGHT,
     gap_angle_deg=GAP_ANGLE,
 ):
+    """
+    Creates a radial ring of bricks in the scene.
+
+    Args:
+        count (int): Number of bricks in the ring.
+        inner_radius (float): Inner radius of the brick ring.
+        outer_radius (float): Outer radius of the brick ring.
+        height (float): Height of each brick.
+        gap_angle_deg (float): Angle of the gap between bricks in degrees.
+    """
     angle_step = 360.0 / count
     half_gap = gap_angle_deg * 0.5
     bricks = []

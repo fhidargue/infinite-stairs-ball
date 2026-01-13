@@ -29,6 +29,12 @@ from utils.utils import (
 
 
 def get_ball_controls(ball_rig):
+    """
+    Returns the ball controls for a given ball rig.
+
+    Args:
+        ball_rig (str): The name of the ball rig.
+    """
     MOVE = pm.PyNode(f"{ball_rig}|move_anim")
     SQUASH = pm.PyNode(f"{ball_rig}|move_anim|squash_stretch_axis_anim")
     ROTATE = pm.PyNode(
@@ -43,6 +49,13 @@ def get_ball_controls(ball_rig):
 
 
 def collect_steps(stair_group, excluded_stairs):
+    """
+    Collects and returns the steps from a stair group, excluding specified steps.
+
+    Args:
+        stair_group (str): The name of the stair group.
+        excluded_stairs (dict): A dictionary mapping stair group names to sets of step names to exclude.
+    """
     group = pm.PyNode(stair_group)
     exclude = excluded_stairs.get(group.nodeName(), set())
 
@@ -59,6 +72,13 @@ def collect_steps(stair_group, excluded_stairs):
 
 
 def step_top_center(step, radius):
+    """
+    Returns the top center position of a step, adjusted by the ball radius.
+
+    Args:
+        step (pm.PyNode): The step node.
+        radius (float): The radius of the ball.
+    """
     bb = step.getBoundingBox(space="world")
     return pm.datatypes.Vector(
         (bb.min().x + bb.max().x) * 0.5,
@@ -68,6 +88,15 @@ def step_top_center(step, radius):
 
 
 def collect_targets(ball_rig, stair_groups_in_order, excluded_stairs, start_overrides=None):
+    """
+    Collects and returns the target positions for the ball to bounce on.
+
+    Args:
+        ball_rig (str): The name of the ball rig.
+        stair_groups_in_order (list): A list of stair group names in the order they should be visited.
+        excluded_stairs (dict): A dictionary mapping stair group names to sets of step names to exclude.
+        start_overrides (dict, optional): A dictionary mapping stair group names to step names to start from.
+    """
     _, _, _, radius = get_ball_controls(ball_rig)
     visit_counts = {}
     targets = []
@@ -105,6 +134,13 @@ def collect_targets(ball_rig, stair_groups_in_order, excluded_stairs, start_over
     return targets
 
 def collect_targets_from_sequence(ball_rig, step_sequence):
+    """
+    Collects and returns target positions based on a custom step sequence.
+
+    Args:
+        ball_rig (str): The name of the ball rig.
+        step_sequence (list): A list of tuples containing (stair_group_name, step_number
+    """
     _, _, _, radius = get_ball_controls(ball_rig)
     targets = []
 
@@ -151,6 +187,24 @@ def bounce_on_stairs(
     squash_hold_mult=1.0,
     impulse_ratio=0.35,
 ):
+    """
+    Animates a ball rig to bounce on stairs.
+
+    Args:
+        ball_rig (str): The name of the ball rig.
+        stair_groups_in_order (list): A list of stair group names in the order they should be visited.
+        excluded_stairs (dict): A dictionary mapping stair group names to sets of step names to exclude.
+        start_frame (int): The starting frame for the animation.
+        total_frames (int): The total number of frames for the animation.
+        squash (float): The squash factor for the ball.
+        stretch (float): The stretch factor for the ball.
+        roll_normalizer (float): The normalizer for roll based on velocity.
+        start_overrides (dict, optional): A dictionary mapping stair group names to step names to start from.
+        step_sequence (list, optional): A custom sequence of steps as a list of tuples (stair_group_name, step_number).
+        jump_power (float): A multiplier for the jump height.
+        squash_hold_mult (float): A multiplier for the duration of the squash hold.
+        impulse_ratio (float): The ratio of the impulse height to the peak height.
+    """
     MOVE, SQUASH, ROTATE, RADIUS = get_ball_controls(ball_rig)
     BOUNCE_HEIGHT = RADIUS * BOUNCE_HEIGHT_MULT * JUMP_HEIGHT_SCALE
     SQUASH_Y_OFFSET = 0.15 * RADIUS

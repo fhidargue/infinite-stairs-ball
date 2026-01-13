@@ -4,6 +4,16 @@ import pymel.core as pm
 
 
 def create_stairs_with_base():
+    """
+    Creates a set of stairs with a base in the scene.
+
+    Args:
+        step_count (int): Number of steps in the staircase.
+        run (float): The horizontal distance of each step.
+        rise (float): The vertical height of each step.
+        depth (float): The depth of each step.
+        base_height (float): The height of the base.
+    """
     step_count = 6
     run = 1.0
     rise = 1.0

@@ -33,6 +33,24 @@ def build_torii_sequence(
     max_stairs=MAX_NUM_STAIRS,
     torii_every_num=GATE_EVERY_NUM,
 ):
+    """
+    Builds a torii corridor with stairs in the scene.
+
+    Args:
+        base_gate_name (str): Name of the base torii gate to duplicate.
+        corridor_gate_count (int): Number of torii gates in the corridor.
+        gate_spacing (float): Spacing between each torii gate.
+        scale_decay (float): Scale decay factor for each subsequent gate.
+        base_y (float): Base Y position for the gates.
+        height_reference (float): Reference height for gate placement.
+        stair_forward (float): Forward position increment for each stair.
+        stair_scale (float): Initial scale for the stairs.
+        stair_rotation_x (float): Rotation around the X-axis for the stairs.
+        stair_scale_decay (float): Scale decay factor for each subsequent stair.
+        min_stair_height (float): Minimum height for the stairs.
+        max_stairs (int): Maximum number of stairs to create.
+        torii_every_num (int): Place a torii gate on every Nth stair.
+    """
     if not pm.objExists(base_gate_name):
         pm.error(f"{base_gate_name} not found in scene")
 
